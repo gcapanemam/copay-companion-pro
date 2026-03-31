@@ -23,11 +23,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    console.log("Received text length:", text.length);
-    console.log("First 500 chars:", text.substring(0, 500));
+    // Normalize: collapse multiple spaces into single space per line
+    const normalizedText = text.split("\n").map((l: string) => l.replace(/\s+/g, " ").trim()).join("\n");
 
-    // Detect type based on content
-    const upperText = text.toUpperCase();
+    console.log("Received text length:", text.length);
+    console.log("Normalized first 500:", normalizedText.substring(0, 500));
+
+    const upperText = normalizedText.toUpperCase();
     const isMensalidade = upperText.includes("FATURA MENSAL") || upperText.includes("ANALÍTICO FATURA");
     const isCoparticipacao = upperText.includes("CO-PARTICIPAÇÃO") || upperText.includes("COPARTICIPA") || upperText.includes("REMESSA");
 
@@ -36,13 +38,13 @@ Deno.serve(async (req) => {
 
     if (isCoparticipacao) {
       tipo = "coparticipacao";
-      result = await parseCoparticipacao(supabase, text);
+      result = await parseCoparticipacao(supabase, normalizedText);
     } else if (isMensalidade) {
       tipo = "mensalidade";
-      result = await parseMensalidade(supabase, text);
+      result = await parseMensalidade(supabase, normalizedText);
     } else {
       return new Response(
-        JSON.stringify({ error: "Tipo de PDF não reconhecido. Envie uma fatura mensal ou relatório de coparticipação da Hapvida." }),
+        JSON.stringify({ error: "Tipo de PDF não reconhecido." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -103,14 +105,13 @@ async function getOrCreateDependente(supabase: any, titularId: string, nome: str
 }
 
 async function parseMensalidade(supabase: any, text: string) {
-  const lines = text.split("\n");
+  const lines = text.split("\n").filter((l: string) => l.trim());
 
-  // Extract vencimento
+  // Extract vencimento from line like: "Obrigação 3025610467 Controle 1010516565640 Vencimento 15/03/25"
   let mes = 0, ano = 0;
   for (const line of lines) {
     const vencMatch = line.match(/Vencimento\s+(\d{2})\/(\d{2})\/(\d{2,4})/i);
     if (vencMatch) {
-      const day = parseInt(vencMatch[1]);
       mes = parseInt(vencMatch[2]);
       ano = parseInt(vencMatch[3]);
       if (ano < 100) ano += 2000;
@@ -124,15 +125,10 @@ async function parseMensalidade(supabase: any, text: string) {
     ano = now.getFullYear();
   }
 
-  // Parse titulares and their beneficiaries
-  // Pattern: "Titular      NAME                    CPF   XXXX"
-  // Then credential lines with: CREDENTIAL CPF BENEFICIARIO PAREN. ... Mensalidade ... Cobrado
-  
   interface Beneficiario {
     nome: string;
     cpf: string;
     parentesco: string;
-    mensalidade: number;
     cobrado: number;
     titularNome: string;
     titularCpf: string;
@@ -141,71 +137,56 @@ async function parseMensalidade(supabase: any, text: string) {
   const beneficiarios: Beneficiario[] = [];
   let currentTitular = "";
   let currentTitularCpf = "";
-  const processedTitulares = new Set<string>();
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Match titular line: "Titular      NAME       CPF   XXXXX"
-    const titularMatch = line.match(/^Titular\s+(.+?)\s{2,}CPF\s+(\d+)/i);
+    // Match: "Titular ELIANE RIBEIRO MARTINS CPF 55965547668"
+    const titularMatch = line.match(/^Titular\s+(.+?)\s+CPF\s+(\d+)/i);
     if (titularMatch) {
-      currentTitular = titularMatch[1].trim();
+      currentTitular = titularMatch[1].trim().replace(/\s+/g, " ");
       currentTitularCpf = titularMatch[2].trim();
       continue;
     }
 
-    // Match credential line with values
-    // Pattern: CREDENTIAL CPF BENEFICIARIO PARENTESCO ... MENSALIDADE ... COBRADO
-    const credMatch = line.match(
-      /^\S+\.\d+-\d+\s+\d+\s+[\d-]+\s+(.+?)\s+(TITULAR|FILHO\(A\)|CONJUGE|COMPANHEIRO)\s+.+?\s+(\d+[.,]\d{2})\s+[\d.,]+\s+[\d.,]+\s+[\d.,]+\s+([\d.,]+)\s*$/
-    );
-    if (credMatch && currentTitular) {
-      const benefNome = credMatch[1].trim();
-      const parentesco = credMatch[2];
-      const mensalidade = parseFloat(credMatch[3].replace(",", "."));
-      const cobrado = parseFloat(credMatch[4].replace(",", "."));
-
-      // Skip zero-value entries (like odonto plans with 0.00)
-      if (cobrado > 0) {
+    // Match credential lines - they start with something like "0CBNA.000001-00" or "0CC21.000001-00"
+    // After normalization, format: "0CBNA.000001-00 7 559655476-68 ELIANE RIBEIRO MARTINS TITULAR DADY RIBEIRO MARTINS 29/12/63 61 10/12/21 1753 0.00 1 269.85 0.00 0.00 0.00 269.85"
+    const credLineMatch = line.match(/^\w+\.\d+-\d+\s/);
+    if (credLineMatch && currentTitular) {
+      // Extract parentesco (TITULAR, FILHO(A), CONJUGE, etc.)
+      const parentescoMatch = line.match(/\b(TITULAR|FILHO\(A\)|CONJUGE|COMPANHEIRO\(A\)?)\b/);
+      if (!parentescoMatch) continue;
+      
+      const parentesco = parentescoMatch[1];
+      
+      // Extract all decimal numbers from the line
+      const allNums = [...line.matchAll(/(\d+[.,]\d{2})/g)].map(m => parseFloat(m[1].replace(",", ".")));
+      
+      // The last number is "Cobrado", typically the last value
+      if (allNums.length < 1) continue;
+      const cobrado = allNums[allNums.length - 1];
+      
+      // Skip zero entries
+      if (cobrado <= 0) continue;
+      
+      // Extract beneficiary name: it's between the CPF (XXX-XX format) and the parentesco
+      const nameMatch = line.match(/\d{3}-\d{2}\s+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)\s+(?:TITULAR|FILHO\(A\)|CONJUGE|COMPANHEIRO)/);
+      if (nameMatch) {
         beneficiarios.push({
-          nome: benefNome,
+          nome: nameMatch[1].trim().replace(/\s+/g, " "),
           cpf: "",
           parentesco,
-          mensalidade,
           cobrado,
           titularNome: currentTitular,
           titularCpf: currentTitularCpf,
         });
       }
-      continue;
-    }
-
-    // Simpler match for lines that may have different spacing
-    if (currentTitular && line.match(/^\S+\.\d+-\d+/)) {
-      // Try to extract the last numeric value as cobrado
-      const nums = [...line.matchAll(/([\d]+[.,]\d{2})/g)].map(m => parseFloat(m[1].replace(",", ".")));
-      if (nums.length >= 2) {
-        const cobrado = nums[nums.length - 1];
-        const mensalidade = nums.find(n => n > 0) || 0;
-        
-        // Extract name - it's after the CPF field
-        const nameMatch = line.match(/[\d-]+\s+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)\s+(TITULAR|FILHO\(A\)|CONJUGE)/);
-        if (nameMatch && cobrado > 0) {
-          beneficiarios.push({
-            nome: nameMatch[1].trim(),
-            cpf: "",
-            parentesco: nameMatch[2],
-            mensalidade: cobrado,
-            cobrado,
-            titularNome: currentTitular,
-            titularCpf: currentTitularCpf,
-          });
-        }
-      }
     }
   }
 
-  // Now save to database
+  console.log(`Found ${beneficiarios.length} beneficiarios for ${mes}/${ano}`);
+
+  // Save to database
   let titularesProcessados = 0;
   let dependentesProcessados = 0;
 
@@ -219,22 +200,17 @@ async function parseMensalidade(supabase: any, text: string) {
   }
 
   for (const [titularNome, members] of titularGroups) {
-    if (processedTitulares.has(titularNome)) continue;
-    processedTitulares.add(titularNome);
-
     const titularCpf = members[0]?.titularCpf;
     const titularId = await getOrCreateTitular(supabase, titularNome, titularCpf);
 
     for (const member of members) {
       if (member.parentesco === "TITULAR") {
-        // Upsert titular mensalidade
         await supabase.from("mensalidades").upsert(
           { titular_id: titularId, dependente_id: null, mes, ano, valor: member.cobrado },
           { onConflict: "titular_id,dependente_id,mes,ano" }
         );
         titularesProcessados++;
       } else {
-        // Create dependente and upsert mensalidade
         const depId = await getOrCreateDependente(supabase, titularId, member.nome);
         await supabase.from("mensalidades").upsert(
           { titular_id: titularId, dependente_id: depId, mes, ano, valor: member.cobrado },
@@ -255,11 +231,12 @@ async function parseMensalidade(supabase: any, text: string) {
 }
 
 async function parseCoparticipacao(supabase: any, text: string) {
-  const lines = text.split("\n");
+  const lines = text.split("\n").filter((l: string) => l.trim());
 
-  // Extract period from header line like: "1010568516705 15/08/2025  128,20"
+  // Extract period
   let mes = 0, ano = 0;
   for (const line of lines) {
+    // Match: "1010568516705 15/08/2025 128,20"
     const periodMatch = line.match(/\d{10,}\s+\d{2}\/(\d{2})\/(\d{4})/);
     if (periodMatch) {
       mes = parseInt(periodMatch[1]);
@@ -269,7 +246,7 @@ async function parseCoparticipacao(supabase: any, text: string) {
   }
 
   if (mes === 0) {
-    // Try date format in procedure lines
+    // Try from procedure dates
     for (const line of lines) {
       const dateMatch = line.match(/\d{2}\/(\d{2})\/(\d{4})/);
       if (dateMatch) {
@@ -286,14 +263,7 @@ async function parseCoparticipacao(supabase: any, text: string) {
     if (ano === 0) ano = now.getFullYear();
   }
 
-  // Parse structure:
-  // "0CC21000004-ADRIANE NASCIMENTO DE BRITO" => titular block
-  // "Cod. Usuario  Matricula  Cpf  Nome"
-  // "0CC21000004022   6677952606  DANIEL MORAES DE BRITO" => user who used
-  // "T99883893   15/07/2025   15/07/2025   00010014 - CONSULTA...   TELECONSULTA   1   25,64" => procedure
-
   interface CopartEntry {
-    titularCode: string;
     titularNome: string;
     nomeUsuario: string;
     cpfUsuario: string;
@@ -305,7 +275,6 @@ async function parseCoparticipacao(supabase: any, text: string) {
   }
 
   const entries: CopartEntry[] = [];
-  let currentTitularCode = "";
   let currentTitularNome = "";
   let currentUserNome = "";
   let currentUserCpf = "";
@@ -317,22 +286,21 @@ async function parseCoparticipacao(supabase: any, text: string) {
     // Match titular block: "0CC21000004-ADRIANE NASCIMENTO DE BRITO"
     const titularBlockMatch = line.match(/^(\w+\d+)-([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+)$/);
     if (titularBlockMatch) {
-      currentTitularCode = titularBlockMatch[1];
-      currentTitularNome = titularBlockMatch[2].trim();
+      currentTitularNome = titularBlockMatch[2].trim().replace(/\s+/g, " ");
       currentUserNome = "";
       currentUserCpf = "";
       continue;
     }
 
-    // Match user line (after "Cod. Usuario" header): "0CC21000004022    6677952606   DANIEL MORAES DE BRITO"
-    const userMatch = line.match(/^\w+\d{3,}\s+(\d{10,})\s+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+)$/);
+    // Match user line: "0CC21000004022 6677952606 DANIEL MORAES DE BRITO"
+    const userMatch = line.match(/^\w+\d{3,}\s+(\d{10,})\s+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+)$/);
     if (userMatch && currentTitularNome) {
       currentUserCpf = userMatch[1];
-      currentUserNome = userMatch[2].trim();
+      currentUserNome = userMatch[2].trim().replace(/\s+/g, " ");
       continue;
     }
 
-    // Match procedure line: "T99883893   15/07/2025   15/07/2025   00010014 - CONSULTA EM CONSULTORIO   TELECONSULTA   1   25,64"
+    // Match procedure: "T99883893 15/07/2025 15/07/2025 00010014 - CONSULTA EM CONSULTORIO TELECONSULTA - DIGITAL 1 25,64"
     const procMatch = line.match(
       /^[A-Z]\d+\s+(\d{2}\/\d{2}\/\d{4})\s+\d{2}\/\d{2}\/\d{4}\s+\d+\s*-\s*(.+?)\s{2,}(.+?)\s+(\d+)\s+([\d.,]+)\s*$/
     );
@@ -341,10 +309,10 @@ async function parseCoparticipacao(supabase: any, text: string) {
       const procedimento = procMatch[2].trim();
       const local = procMatch[3].trim();
       const quantidade = parseInt(procMatch[4]);
-      const valor = parseFloat(procMatch[5].replace(".", "").replace(",", "."));
+      const valorStr = procMatch[5].replace(".", "").replace(",", ".");
+      const valor = parseFloat(valorStr);
 
       entries.push({
-        titularCode: currentTitularCode,
         titularNome: currentTitularNome,
         nomeUsuario: currentUserNome || currentTitularNome,
         cpfUsuario: currentUserCpf,
@@ -354,6 +322,37 @@ async function parseCoparticipacao(supabase: any, text: string) {
         quantidade,
         valor,
       });
+      continue;
+    }
+
+    // Simpler proc match (single space between fields after normalization)
+    // "T99883893 15/07/2025 15/07/2025 00010014 - CONSULTA EM CONSULTORIO TELECONSULTA - DIGITAL 1 25,64"
+    const simpleProcMatch = line.match(
+      /^[A-Z]\d+\s+(\d{2}\/\d{2}\/\d{4})\s+\d{2}\/\d{2}\/\d{4}\s+(\d+)\s*-\s*(.+)/
+    );
+    if (simpleProcMatch && currentTitularNome) {
+      const dataStr = simpleProcMatch[1];
+      const rest = simpleProcMatch[3];
+      
+      // Extract value from end
+      const valMatch = rest.match(/(\d+)\s+([\d.,]+)\s*$/);
+      if (valMatch) {
+        const quantidade = parseInt(valMatch[1]);
+        const valorStr = valMatch[2].replace(".", "").replace(",", ".");
+        const valor = parseFloat(valorStr);
+        const procLocal = rest.substring(0, rest.length - valMatch[0].length).trim();
+
+        entries.push({
+          titularNome: currentTitularNome,
+          nomeUsuario: currentUserNome || currentTitularNome,
+          cpfUsuario: currentUserCpf,
+          procedimento: procLocal,
+          local: "",
+          dataUtilizacao: dataStr.split("/").reverse().join("-"),
+          quantidade,
+          valor,
+        });
+      }
     }
   }
 
@@ -371,26 +370,23 @@ async function parseCoparticipacao(supabase: any, text: string) {
   let coparticipacoesCriadas = 0;
   let itensCriados = 0;
 
-  for (const [key, userEntries] of userGroups) {
+  for (const [, userEntries] of userGroups) {
     const titularNome = userEntries[0].titularNome;
     const nomeUsuario = userEntries[0].nomeUsuario;
 
-    // Get or create titular
     const titularId = await getOrCreateTitular(supabase, titularNome);
 
-    // Determine if user is titular or dependente
     let dependenteId: string | null = null;
     if (nomeUsuario.toUpperCase() !== titularNome.toUpperCase()) {
       dependenteId = await getOrCreateDependente(supabase, titularId, nomeUsuario, userEntries[0].cpfUsuario);
     }
 
-    // Create coparticipacao
     const { data: copart, error: copartError } = await supabase
       .from("coparticipacoes")
       .insert({
         titular_id: titularId,
         dependente_id: dependenteId,
-        nome_usuario: nomeUsuario.toUpperCase(),
+        nome_usuario: nomeUsuario.toUpperCase().replace(/\s+/g, " "),
         data_utilizacao: userEntries[0].dataUtilizacao,
         mes,
         ano,
@@ -408,7 +404,7 @@ async function parseCoparticipacao(supabase: any, text: string) {
     const items = userEntries.map((e) => ({
       coparticipacao_id: copart.id,
       procedimento: e.procedimento,
-      local: e.local,
+      local: e.local || null,
       quantidade: e.quantidade,
       valor: e.valor,
     }));
