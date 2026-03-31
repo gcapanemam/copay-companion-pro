@@ -80,6 +80,40 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Bulk set CPF as password for all beneficiaries
+    if (action === "set-all-senhas-cpf") {
+      const { data: titulares } = await supabase
+        .from("titulares")
+        .select("cpf")
+        .not("cpf", "is", null);
+
+      const { data: dependentes } = await supabase
+        .from("dependentes")
+        .select("cpf")
+        .not("cpf", "is", null);
+
+      const allCpfs = [
+        ...(titulares || []).map((t: any) => t.cpf),
+        ...(dependentes || []).map((d: any) => d.cpf),
+      ].filter((c: string) => c && c.length === 11);
+
+      let count = 0;
+      for (const rawCpf of allCpfs) {
+        // Format as XXX.XXX.XXX-XX for the password
+        const formatted = `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`;
+        const hash = await hashPassword(formatted);
+        await supabase.from("beneficiario_senhas").upsert(
+          { cpf: rawCpf, senha_hash: hash },
+          { onConflict: "cpf" }
+        );
+        count++;
+      }
+
+      return new Response(JSON.stringify({ success: true, count }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const cleanCpf = (cpf || "").replace(/[^0-9]/g, "");
 
     if (!cleanCpf) {
