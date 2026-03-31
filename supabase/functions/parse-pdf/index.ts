@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
 });
 
 async function getOrCreateTitular(supabase: any, nome: string, cpf?: string) {
-  const cleanName = nome.trim().toUpperCase();
+  const cleanName = nome.trim().toUpperCase().replace(/\s+/g, " ");
   const { data: existing } = await supabase
     .from("titulares")
     .select("id")
