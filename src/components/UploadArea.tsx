@@ -69,11 +69,17 @@ export function UploadArea({ onUploadComplete }: UploadAreaProps) {
       const text = await extractTextFromPdf(file);
       console.log("Extracted text:", text.substring(0, 500));
 
-      const { data, error } = await supabase.functions.invoke("parse-pdf", {
+      const response = await supabase.functions.invoke("parse-pdf", {
         body: { text, filename: file.name },
       });
 
-      if (error) throw error;
+      if (response.error) {
+        // Try to get error message from response data
+        const errorMsg = response.data?.error || response.error.message || "Erro ao processar PDF";
+        throw new Error(errorMsg);
+      }
+
+      const data = response.data;
 
       const tipo = data.tipo === "mensalidade" ? "Fatura Mensal" : "Coparticipação";
       const message = data.tipo === "mensalidade"
