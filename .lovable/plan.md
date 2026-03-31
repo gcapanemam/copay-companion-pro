@@ -1,79 +1,56 @@
 
 
-# Sistema de Controle de Plano de Saude e Coparticipacao
+# Area do Beneficiario - Login por CPF e Informe IR
 
 ## Resumo
 
-Sistema para upload de PDFs da Hapvida (faturas mensais e coparticipacao), com parsing dos dados, armazenamento no Supabase e exibicao em tabela anual por titular/dependente.
+Criar uma area onde cada beneficiario (titular ou dependente) pode fazer login com CPF e senha, visualizar seus dados de mensalidade e coparticipacao, e gerar um informe para Imposto de Renda.
 
-## Estrutura dos PDFs
+## Estrutura
 
-**PDF 1 - Fatura Mensal**: Vencimento, nome do titular, dependentes, valor da mensalidade de cada um.
-**PDF 2 - Coparticipacao**: Titular, nome de quem utilizou, data, procedimentos realizados, local, valor.
+### 1. Banco de dados
 
-## Plano de Implementacao
+- Nova tabela `beneficiario_senhas`: `cpf TEXT PRIMARY KEY`, `senha_hash TEXT NOT NULL`, `created_at TIMESTAMPTZ DEFAULT now()`
+- O admin (pagina principal) tera um botao para cadastrar/resetar senha de um beneficiario por CPF
 
-### 1. Configurar Supabase (Lovable Cloud)
+### 2. Edge Function `login-beneficiario`
 
-Criar as seguintes tabelas:
+- Recebe `{ cpf, senha }`
+- Valida contra `beneficiario_senhas` (usando bcrypt hash)
+- Se valido, busca o titular ou dependente pelo CPF e retorna todos os dados de mensalidades e coparticipacoes do ano selecionado
+- Retorna os dados diretamente (sem sessao persistente - portal simples)
 
-- **titulares**: id, nome, matricula, cpf
-- **dependentes**: id, titular_id, nome, matricula, cpf
-- **mensalidades**: id, titular_id, dependente_id (nullable), mes, ano, valor
-- **coparticipacoes**: id, titular_id, dependente_id (nullable), nome_usuario, data_utilizacao, mes, ano
-- **coparticipacao_itens**: id, coparticipacao_id, procedimento, local, quantidade, valor
-- **uploads**: id, tipo (mensalidade/coparticipacao), nome_arquivo, data_upload
+### 3. Novas paginas
 
-RLS habilitado. Policies para usuarios autenticados.
+- **`/minha-area`** - Login por CPF + senha, apos login mostra:
+  - Nome do beneficiario
+  - Tabela com mensalidades e coparticipacoes mes a mes
+  - Botao "Informe IR" que gera um resumo anual
 
-### 2. Edge Function para parsing de PDF
+### 4. Informe para Imposto de Renda
 
-Criar uma Supabase Edge Function que:
-- Recebe o PDF via upload
-- Usa pdf-parse para extrair texto
-- Identifica o tipo (fatura mensal vs coparticipacao) pelo conteudo
-- Extrai dados estruturados usando regex baseado nos padroes da Hapvida
-- Salva no banco de dados
+- Botao gera um resumo em tela (com opcao de imprimir/PDF via `window.print()`)
+- Conteudo: Nome, CPF, ano-calendario, total pago em plano de saude (mensalidade + coparticipacao), discriminado por mes
+- CNPJ da operadora Hapvida no cabecalho
 
-### 3. Pagina Principal - Upload e Tabela
+### 5. Gestao de senhas (area admin)
 
-**Componentes:**
-- **UploadArea**: Drag-and-drop ou botao para upload de PDFs, com indicador de tipo detectado
-- **TabelaAnual**: Tabela principal com:
-  - Coluna 1: Nome (titular em negrito, dependentes indentados abaixo)
-  - Colunas 2-13: Janeiro a Dezembro, cada celula mostrando:
-    - Valor do plano (mensalidade)
-    - Valor da coparticipacao (abaixo, em cor diferente)
-    - Botao/icone clicavel para ver detalhes dos exames
-  - Coluna 14: Total anual
-- **DialogExames**: Modal que abre ao clicar no botao, mostrando lista de exames/consultas com data, procedimento, local e valor
-- **SeletorAno**: Dropdown para selecionar o ano de visualizacao
-
-### 4. Fluxo do Usuario
-
-1. Usuario faz upload de um ou mais PDFs
-2. Sistema detecta o tipo e extrai os dados
-3. Dados sao salvos no Supabase
-4. Tabela e atualizada automaticamente
-5. Usuario pode clicar no botao de cada celula para ver detalhes dos exames
-
-## Detalhes Tecnicos
-
-- **PDF Parsing**: Supabase Edge Function com biblioteca de parsing de texto
-- **Banco**: Supabase via Lovable Cloud (migrations para schema, queries via supabase-js)
-- **Frontend**: React + shadcn/ui (Table, Dialog, Button, Card)
-- **Estado**: React Query para fetch dos dados
-- **Autenticacao**: Supabase Auth (login simples para proteger acesso)
+- Na pagina principal (Index), adicionar um botao/dialog para cadastrar senha por CPF
+- Lista de CPFs dos titulares/dependentes com opcao de definir senha
 
 ## Arquivos a criar/modificar
 
-- Migrations para todas as tabelas
-- `src/integrations/supabase/` - client e types
-- `supabase/functions/parse-pdf/` - Edge Function
-- `src/pages/Index.tsx` - pagina principal
-- `src/components/UploadArea.tsx`
-- `src/components/TabelaAnual.tsx`
-- `src/components/DialogExames.tsx`
-- `src/components/SeletorAno.tsx`
-- `src/hooks/useTitulares.ts`, `useMensalidades.ts`, `useCoparticipacoes.ts`
+- Migration: tabela `beneficiario_senhas`
+- `supabase/functions/login-beneficiario/index.ts`
+- `src/pages/MinhaArea.tsx` - pagina do beneficiario (login + dashboard + IR)
+- `src/components/GerenciarSenhas.tsx` - dialog para admin cadastrar senhas
+- `src/pages/Index.tsx` - adicionar botao de gerenciar senhas
+- `src/App.tsx` - nova rota `/minha-area`
+
+## Detalhes tecnicos
+
+- Senha hasheada com bcrypt na edge function
+- Login sem Supabase Auth (portal simples, sem sessao persistente - dados carregados via edge function)
+- Informe IR usa CSS `@media print` para formatacao de impressao
+- RLS: tabela `beneficiario_senhas` acessivel apenas via service role (edge function)
 
