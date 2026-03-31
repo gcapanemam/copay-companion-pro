@@ -85,13 +85,34 @@ async function getOrCreateTitular(supabase: any, nome: string, cpf?: string) {
 
 async function getOrCreateDependente(supabase: any, titularId: string, nome: string, cpf?: string) {
   const cleanName = nome.trim().toUpperCase().replace(/\s+/g, " ");
-  const { data: existing } = await supabase
+  
+  // Try exact match first
+  const { data: exact } = await supabase
     .from("dependentes")
-    .select("id")
+    .select("id, nome")
     .eq("titular_id", titularId)
     .eq("nome", cleanName)
     .maybeSingle();
-  if (existing) return existing.id;
+  if (exact) return exact.id;
+
+  // Try prefix match: one name starts with the other (handles truncated names)
+  const { data: allDeps } = await supabase
+    .from("dependentes")
+    .select("id, nome")
+    .eq("titular_id", titularId);
+
+  if (allDeps) {
+    for (const dep of allDeps) {
+      const depName = dep.nome.replace(/\s+/g, " ").trim();
+      if (depName.startsWith(cleanName) || cleanName.startsWith(depName)) {
+        // Update to the longer (more complete) name
+        if (cleanName.length > depName.length) {
+          await supabase.from("dependentes").update({ nome: cleanName }).eq("id", dep.id);
+        }
+        return dep.id;
+      }
+    }
+  }
 
   const insertData: any = { titular_id: titularId, nome: cleanName };
   if (cpf) insertData.cpf = cpf.replace(/[^0-9]/g, "");
