@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
 });
 
 async function getOrCreateTitular(supabase: any, nome: string, cpf?: string) {
-  const cleanName = nome.trim().toUpperCase();
+  const cleanName = nome.trim().toUpperCase().replace(/\s+/g, " ");
   const { data: existing } = await supabase
     .from("titulares")
     .select("id")
@@ -82,7 +82,7 @@ async function getOrCreateTitular(supabase: any, nome: string, cpf?: string) {
 }
 
 async function getOrCreateDependente(supabase: any, titularId: string, nome: string, cpf?: string) {
-  const cleanName = nome.trim().toUpperCase();
+  const cleanName = nome.trim().toUpperCase().replace(/\s+/g, " ");
   const { data: existing } = await supabase
     .from("dependentes")
     .select("id")
