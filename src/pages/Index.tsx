@@ -76,6 +76,13 @@ const Index = () => {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            <GerenciarSenhas />
+            <NavLink to="/minha-area">
+              <Button variant="outline" size="sm">
+                <ExternalLink className="h-4 w-4 mr-1" />
+                Portal Beneficiário
+              </Button>
+            </NavLink>
             <SeletorAno ano={ano} onAnoChange={setAno} />
           </div>
         </div>
