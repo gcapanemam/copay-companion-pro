@@ -2,7 +2,7 @@ import { useState } from "react";
 import { UploadArea } from "@/components/UploadArea";
 import { TabelaAnual } from "@/components/TabelaAnual";
 import { SeletorAno } from "@/components/SeletorAno";
-import { Activity, Trash2 } from "lucide-react";
+import { Activity, Trash2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +17,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { GerenciarSenhas } from "@/components/GerenciarSenhas";
+import { NavLink } from "@/components/NavLink";
 
 const Index = () => {
   const [ano, setAno] = useState(2025);
@@ -74,6 +76,13 @@ const Index = () => {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            <GerenciarSenhas />
+            <NavLink to="/minha-area">
+              <Button variant="outline" size="sm">
+                <ExternalLink className="h-4 w-4 mr-1" />
+                Portal Beneficiário
+              </Button>
+            </NavLink>
             <SeletorAno ano={ano} onAnoChange={setAno} />
           </div>
         </div>
