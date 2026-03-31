@@ -34,7 +34,7 @@ async function extractTextFromPdf(file: File): Promise<string> {
         textParts.push(lineText);
         lineText = "";
       }
-      if (lineText && item.str) lineText += "  ";
+      if (lineText && item.str) lineText += " ";
       lineText += item.str;
       lastY = y;
     }
