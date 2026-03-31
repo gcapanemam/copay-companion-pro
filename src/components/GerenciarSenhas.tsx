@@ -80,6 +80,23 @@ export const GerenciarSenhas = () => {
     }
   };
 
+  const handleSetAllCpf = async () => {
+    setSettingAll(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("login-beneficiario", {
+        body: { action: "set-all-senhas-cpf" },
+      });
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      toast({ title: "Sucesso", description: `Senha definida como CPF para ${data.count} beneficiários` });
+      loadBeneficiarios();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setSettingAll(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -92,6 +109,13 @@ export const GerenciarSenhas = () => {
         <DialogHeader>
           <DialogTitle>Gerenciar Senhas dos Beneficiários</DialogTitle>
         </DialogHeader>
+
+        <div className="flex justify-end mb-2">
+          <Button size="sm" variant="secondary" onClick={handleSetAllCpf} disabled={settingAll || loading}>
+            {settingAll ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Key className="h-4 w-4 mr-1" />}
+            Definir CPF como senha para todos
+          </Button>
+        </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-8">
