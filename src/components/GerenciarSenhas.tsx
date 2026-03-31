@@ -26,6 +26,7 @@ export const GerenciarSenhas = () => {
   const [loading, setLoading] = useState(false);
   const [senhas, setSenhas] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
+  const [settingAll, setSettingAll] = useState(false);
   const { toast } = useToast();
 
   const formatCpf = (cpf: string) => {
