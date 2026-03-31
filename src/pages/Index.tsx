@@ -17,6 +17,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { GerenciarSenhas } from "@/components/GerenciarSenhas";
+import { NavLink } from "@/components/NavLink";
 
 const Index = () => {
   const [ano, setAno] = useState(2025);
