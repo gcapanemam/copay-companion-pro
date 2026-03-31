@@ -154,32 +154,36 @@ async function parseMensalidade(supabase: any, text: string) {
     const credLineMatch = line.match(/^\w+\.\d+-\d+\s/);
     if (credLineMatch && currentTitular) {
       // Extract parentesco (TITULAR, FILHO(A), CONJUGE, etc.)
-      const parentescoMatch = line.match(/\b(TITULAR|FILHO\(A\)|CONJUGE|COMPANHEIRO\(A\)?)\b/);
+      const parentescoMatch = line.match(/(TITULAR|FILHO\(A\)|CONJUGE|COMPANHEIRO\(A\)?)/);
       if (!parentescoMatch) continue;
       
       const parentesco = parentescoMatch[1];
+      const parentescoIdx = line.indexOf(parentescoMatch[0]);
       
       // Extract all decimal numbers from the line
       const allNums = [...line.matchAll(/(\d+[.,]\d{2})/g)].map(m => parseFloat(m[1].replace(",", ".")));
       
-      // The last number is "Cobrado", typically the last value
       if (allNums.length < 1) continue;
       const cobrado = allNums[allNums.length - 1];
       
-      // Skip zero entries
       if (cobrado <= 0) continue;
       
-      // Extract beneficiary name: it's between the CPF (XXX-XX format) and the parentesco
-      const nameMatch = line.match(/\d{3}-\d{2}\s+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)\s+(?:TITULAR|FILHO\(A\)|CONJUGE|COMPANHEIRO)/);
-      if (nameMatch) {
-        beneficiarios.push({
-          nome: nameMatch[1].trim().replace(/\s+/g, " "),
-          cpf: "",
-          parentesco,
-          cobrado,
-          titularNome: currentTitular,
-          titularCpf: currentTitularCpf,
-        });
+      // Extract beneficiary name: between CPF (format XXX-XX) and parentesco
+      const beforeParentesco = line.substring(0, parentescoIdx).trim();
+      // Find the CPF pattern (XXX-XX) and get everything after it
+      const cpfEndMatch = beforeParentesco.match(/\d{3}-\d{2}\s+(.+)$/);
+      if (cpfEndMatch) {
+        const nome = cpfEndMatch[1].trim().replace(/\s+/g, " ");
+        if (nome.length > 2) {
+          beneficiarios.push({
+            nome,
+            cpf: "",
+            parentesco,
+            cobrado,
+            titularNome: currentTitular,
+            titularCpf: currentTitularCpf,
+          });
+        }
       }
     }
   }
