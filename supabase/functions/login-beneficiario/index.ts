@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      const valid = await bcrypt.compare(senha, senhaRecord.senha_hash);
+      const valid = await verifyPassword(senha, senhaRecord.senha_hash);
       if (!valid) {
         return new Response(JSON.stringify({ error: "Senha incorreta" }), {
           status: 401,
