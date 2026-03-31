@@ -14,7 +14,223 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      coparticipacao_itens: {
+        Row: {
+          coparticipacao_id: string
+          created_at: string
+          id: string
+          local: string | null
+          procedimento: string
+          quantidade: number
+          valor: number
+        }
+        Insert: {
+          coparticipacao_id: string
+          created_at?: string
+          id?: string
+          local?: string | null
+          procedimento: string
+          quantidade?: number
+          valor?: number
+        }
+        Update: {
+          coparticipacao_id?: string
+          created_at?: string
+          id?: string
+          local?: string | null
+          procedimento?: string
+          quantidade?: number
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coparticipacao_itens_coparticipacao_id_fkey"
+            columns: ["coparticipacao_id"]
+            isOneToOne: false
+            referencedRelation: "coparticipacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coparticipacoes: {
+        Row: {
+          ano: number
+          created_at: string
+          data_utilizacao: string | null
+          dependente_id: string | null
+          id: string
+          mes: number
+          nome_usuario: string
+          titular_id: string
+        }
+        Insert: {
+          ano: number
+          created_at?: string
+          data_utilizacao?: string | null
+          dependente_id?: string | null
+          id?: string
+          mes: number
+          nome_usuario: string
+          titular_id: string
+        }
+        Update: {
+          ano?: number
+          created_at?: string
+          data_utilizacao?: string | null
+          dependente_id?: string | null
+          id?: string
+          mes?: number
+          nome_usuario?: string
+          titular_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coparticipacoes_dependente_id_fkey"
+            columns: ["dependente_id"]
+            isOneToOne: false
+            referencedRelation: "dependentes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coparticipacoes_titular_id_fkey"
+            columns: ["titular_id"]
+            isOneToOne: false
+            referencedRelation: "titulares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dependentes: {
+        Row: {
+          cpf: string | null
+          created_at: string
+          id: string
+          matricula: string | null
+          nome: string
+          titular_id: string
+          updated_at: string
+        }
+        Insert: {
+          cpf?: string | null
+          created_at?: string
+          id?: string
+          matricula?: string | null
+          nome: string
+          titular_id: string
+          updated_at?: string
+        }
+        Update: {
+          cpf?: string | null
+          created_at?: string
+          id?: string
+          matricula?: string | null
+          nome?: string
+          titular_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dependentes_titular_id_fkey"
+            columns: ["titular_id"]
+            isOneToOne: false
+            referencedRelation: "titulares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mensalidades: {
+        Row: {
+          ano: number
+          created_at: string
+          dependente_id: string | null
+          id: string
+          mes: number
+          titular_id: string
+          valor: number
+        }
+        Insert: {
+          ano: number
+          created_at?: string
+          dependente_id?: string | null
+          id?: string
+          mes: number
+          titular_id: string
+          valor?: number
+        }
+        Update: {
+          ano?: number
+          created_at?: string
+          dependente_id?: string | null
+          id?: string
+          mes?: number
+          titular_id?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mensalidades_dependente_id_fkey"
+            columns: ["dependente_id"]
+            isOneToOne: false
+            referencedRelation: "dependentes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensalidades_titular_id_fkey"
+            columns: ["titular_id"]
+            isOneToOne: false
+            referencedRelation: "titulares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      titulares: {
+        Row: {
+          cpf: string | null
+          created_at: string
+          id: string
+          matricula: string | null
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          cpf?: string | null
+          created_at?: string
+          id?: string
+          matricula?: string | null
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          cpf?: string | null
+          created_at?: string
+          id?: string
+          matricula?: string | null
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      uploads: {
+        Row: {
+          data_upload: string
+          id: string
+          nome_arquivo: string
+          tipo: string
+        }
+        Insert: {
+          data_upload?: string
+          id?: string
+          nome_arquivo: string
+          tipo: string
+        }
+        Update: {
+          data_upload?: string
+          id?: string
+          nome_arquivo?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
