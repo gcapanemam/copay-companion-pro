@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      const hash = await bcrypt.hash(senha);
+      const hash = await hashPassword(senha);
 
       const { error } = await supabase.from("beneficiario_senhas").upsert(
         { cpf: cleanCpf, senha_hash: hash },
