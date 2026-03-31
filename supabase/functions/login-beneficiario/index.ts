@@ -195,45 +195,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // List beneficiaries with CPF (for admin password management)
-    if (action === "list-beneficiarios") {
-      const { data: titulares } = await supabase
-        .from("titulares")
-        .select("id, nome, cpf")
-        .not("cpf", "is", null)
-        .order("nome");
-
-      const { data: dependentes } = await supabase
-        .from("dependentes")
-        .select("id, nome, cpf, titular_id")
-        .not("cpf", "is", null)
-        .order("nome");
-
-      const { data: senhas } = await supabase
-        .from("beneficiario_senhas")
-        .select("cpf");
-
-      const cpfsComSenha = new Set((senhas || []).map((s: any) => s.cpf));
-
-      const beneficiarios = [
-        ...(titulares || []).map((t: any) => ({
-          nome: t.nome,
-          cpf: t.cpf,
-          tipo: "Titular",
-          temSenha: cpfsComSenha.has(t.cpf),
-        })),
-        ...(dependentes || []).map((d: any) => ({
-          nome: d.nome,
-          cpf: d.cpf,
-          tipo: "Dependente",
-          temSenha: cpfsComSenha.has(d.cpf),
-        })),
-      ];
-
-      return new Response(JSON.stringify({ beneficiarios }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
     return new Response(JSON.stringify({ error: "Ação inválida" }), {
       status: 400,
