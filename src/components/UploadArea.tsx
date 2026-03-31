@@ -6,7 +6,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import * as pdfjsLib from "pdfjs-dist";
 
-// Set worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 async function extractTextFromPdf(file: File): Promise<string> {
@@ -17,8 +16,6 @@ async function extractTextFromPdf(file: File): Promise<string> {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    
-    // Sort items by y position (descending) then x position (ascending) to maintain layout
     const items = content.items as any[];
     items.sort((a: any, b: any) => {
       const yDiff = b.transform[5] - a.transform[5];
@@ -49,66 +46,94 @@ interface UploadAreaProps {
   onUploadComplete: () => void;
 }
 
+interface FileResult {
+  filename: string;
+  tipo: string;
+  message: string;
+  success: boolean;
+}
+
 export function UploadArea({ onUploadComplete }: UploadAreaProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [lastResult, setLastResult] = useState<{ tipo: string; message: string } | null>(null);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [results, setResults] = useState<FileResult[]>([]);
   const { toast } = useToast();
 
-  const handleFile = useCallback(async (file: File) => {
+  const processFile = useCallback(async (file: File): Promise<FileResult> => {
     if (!file.name.toLowerCase().endsWith(".pdf")) {
-      toast({ title: "Erro", description: "Apenas arquivos PDF são aceitos.", variant: "destructive" });
-      return;
+      return { filename: file.name, tipo: "", message: "Não é um PDF", success: false };
     }
 
-    setUploading(true);
-    setLastResult(null);
-
     try {
-      // Extract text client-side using pdf.js
       const text = await extractTextFromPdf(file);
-      console.log("Extracted text:", text.substring(0, 500));
 
       const response = await supabase.functions.invoke("parse-pdf", {
         body: { text, filename: file.name },
       });
 
       if (response.error) {
-        // Try to get error message from response data
-        const errorMsg = response.data?.error || response.error.message || "Erro ao processar PDF";
-        throw new Error(errorMsg);
+        const errorMsg = response.data?.error || response.error.message || "Erro ao processar";
+        return { filename: file.name, tipo: "", message: errorMsg, success: false };
       }
 
       const data = response.data;
-
       const tipo = data.tipo === "mensalidade" ? "Fatura Mensal" : "Coparticipação";
       const message = data.tipo === "mensalidade"
-        ? `${data.beneficiarios_encontrados} beneficiário(s) processado(s) para ${data.mes}/${data.ano}`
-        : `${data.usuarios_encontrados} usuário(s), ${data.itens_criados} procedimento(s) para ${data.mes}/${data.ano}`;
+        ? `${data.beneficiarios_encontrados} beneficiário(s) - ${data.mes}/${data.ano}`
+        : `${data.usuarios_encontrados} usuário(s), ${data.itens_criados} procedimento(s) - ${data.mes}/${data.ano}`;
 
-      setLastResult({ tipo, message });
-      toast({ title: `${tipo} processada`, description: message });
-      onUploadComplete();
+      return { filename: file.name, tipo, message, success: true };
     } catch (err: any) {
-      console.error("Upload error:", err);
-      toast({ title: "Erro no upload", description: err.message || "Falha ao processar PDF", variant: "destructive" });
-    } finally {
-      setUploading(false);
+      return { filename: file.name, tipo: "", message: err.message || "Erro", success: false };
     }
-  }, [onUploadComplete, toast]);
+  }, []);
+
+  const handleFiles = useCallback(async (files: File[]) => {
+    const pdfFiles = files.filter(f => f.name.toLowerCase().endsWith(".pdf"));
+    if (pdfFiles.length === 0) {
+      toast({ title: "Erro", description: "Nenhum arquivo PDF selecionado.", variant: "destructive" });
+      return;
+    }
+
+    setUploading(true);
+    setResults([]);
+    setProgress({ current: 0, total: pdfFiles.length });
+
+    const allResults: FileResult[] = [];
+    for (let i = 0; i < pdfFiles.length; i++) {
+      setProgress({ current: i + 1, total: pdfFiles.length });
+      const result = await processFile(pdfFiles[i]);
+      allResults.push(result);
+    }
+
+    setResults(allResults);
+    setUploading(false);
+
+    const successCount = allResults.filter(r => r.success).length;
+    if (successCount > 0) {
+      toast({
+        title: "Upload concluído",
+        description: `${successCount} de ${pdfFiles.length} arquivo(s) processado(s) com sucesso.`,
+      });
+      onUploadComplete();
+    } else {
+      toast({ title: "Erro", description: "Nenhum arquivo foi processado com sucesso.", variant: "destructive" });
+    }
+  }, [processFile, onUploadComplete, toast]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) handleFiles(files);
+  }, [handleFiles]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) handleFiles(files);
     e.target.value = "";
-  }, [handleFile]);
+  }, [handleFiles]);
 
   return (
     <Card className="border-dashed border-2 transition-colors hover:border-primary/50">
@@ -124,32 +149,47 @@ export function UploadArea({ onUploadComplete }: UploadAreaProps) {
           {uploading ? (
             <>
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Processando PDF...</p>
+              <p className="text-sm text-muted-foreground">
+                Processando {progress.current} de {progress.total} arquivo(s)...
+              </p>
             </>
-          ) : lastResult ? (
-            <>
-              <CheckCircle2 className="h-10 w-10 text-green-600" />
-              <p className="font-medium text-sm">{lastResult.tipo}</p>
-              <p className="text-sm text-muted-foreground">{lastResult.message}</p>
-              <Button variant="outline" size="sm" onClick={() => setLastResult(null)}>
-                Enviar outro arquivo
-              </Button>
-            </>
+          ) : results.length > 0 ? (
+            <div className="w-full space-y-3">
+              <div className="flex items-center justify-center gap-2">
+                <CheckCircle2 className="h-6 w-6 text-green-600" />
+                <p className="font-medium text-sm">
+                  {results.filter(r => r.success).length} de {results.length} processado(s)
+                </p>
+              </div>
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {results.map((r, i) => (
+                  <div key={i} className={`text-xs flex justify-between items-center px-3 py-1.5 rounded ${r.success ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
+                    <span className="truncate mr-2">{r.filename}</span>
+                    <span className="shrink-0">{r.success ? r.tipo : r.message}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-center">
+                <Button variant="outline" size="sm" onClick={() => setResults([])}>
+                  Enviar mais arquivos
+                </Button>
+              </div>
+            </div>
           ) : (
             <>
               <Upload className="h-10 w-10 text-muted-foreground" />
               <div className="text-center">
-                <p className="font-medium text-sm">Arraste um PDF da Hapvida aqui</p>
-                <p className="text-xs text-muted-foreground mt-1">Fatura mensal ou relatório de coparticipação</p>
+                <p className="font-medium text-sm">Arraste PDFs da Hapvida aqui</p>
+                <p className="text-xs text-muted-foreground mt-1">Faturas mensais e/ou relatórios de coparticipação (múltiplos arquivos)</p>
               </div>
               <label>
                 <Button variant="outline" size="sm" asChild>
                   <span>
                     <FileText className="h-4 w-4 mr-1" />
-                    Selecionar arquivo
+                    Selecionar arquivos
                   </span>
                 </Button>
-                <input type="file" accept=".pdf" className="hidden" onChange={handleFileInput} />
+                <input type="file" accept=".pdf" multiple className="hidden" onChange={handleFileInput} />
               </label>
             </>
           )}
