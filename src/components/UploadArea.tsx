@@ -1,9 +1,49 @@
 import { useState, useCallback } from "react";
-import { Upload, FileText, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import * as pdfjsLib from "pdfjs-dist";
+
+// Set worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+async function extractTextFromPdf(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const textParts: string[] = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    
+    // Sort items by y position (descending) then x position (ascending) to maintain layout
+    const items = content.items as any[];
+    items.sort((a: any, b: any) => {
+      const yDiff = b.transform[5] - a.transform[5];
+      if (Math.abs(yDiff) > 3) return yDiff;
+      return a.transform[4] - b.transform[4];
+    });
+
+    let lastY = -1;
+    let lineText = "";
+    for (const item of items) {
+      const y = Math.round(item.transform[5]);
+      if (lastY !== -1 && Math.abs(y - lastY) > 3) {
+        textParts.push(lineText);
+        lineText = "";
+      }
+      if (lineText && item.str) lineText += "  ";
+      lineText += item.str;
+      lastY = y;
+    }
+    if (lineText) textParts.push(lineText);
+    textParts.push("--- PAGE BREAK ---");
+  }
+
+  return textParts.join("\n");
+}
 
 interface UploadAreaProps {
   onUploadComplete: () => void;
@@ -25,14 +65,21 @@ export function UploadArea({ onUploadComplete }: UploadAreaProps) {
     setLastResult(null);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      // Extract text client-side using pdf.js
+      const text = await extractTextFromPdf(file);
+      console.log("Extracted text:", text.substring(0, 500));
 
-      const { data, error } = await supabase.functions.invoke("parse-pdf", {
-        body: formData,
+      const response = await supabase.functions.invoke("parse-pdf", {
+        body: { text, filename: file.name },
       });
 
-      if (error) throw error;
+      if (response.error) {
+        // Try to get error message from response data
+        const errorMsg = response.data?.error || response.error.message || "Erro ao processar PDF";
+        throw new Error(errorMsg);
+      }
+
+      const data = response.data;
 
       const tipo = data.tipo === "mensalidade" ? "Fatura Mensal" : "Coparticipação";
       const message = data.tipo === "mensalidade"
@@ -45,7 +92,6 @@ export function UploadArea({ onUploadComplete }: UploadAreaProps) {
     } catch (err: any) {
       console.error("Upload error:", err);
       toast({ title: "Erro no upload", description: err.message || "Falha ao processar PDF", variant: "destructive" });
-      setLastResult(null);
     } finally {
       setUploading(false);
     }

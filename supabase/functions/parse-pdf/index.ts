@@ -15,26 +15,21 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const formData = await req.formData();
-    const file = formData.get("file") as File;
-    if (!file) {
-      return new Response(JSON.stringify({ error: "No file provided" }), {
+    const { text, filename } = await req.json();
+    if (!text || !filename) {
+      return new Response(JSON.stringify({ error: "text and filename are required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Read file as array buffer and extract text using a simple approach
-    const arrayBuffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    const text = extractTextFromPdf(bytes);
+    console.log("Received text length:", text.length);
+    console.log("First 500 chars:", text.substring(0, 500));
 
-    console.log("Extracted text length:", text.length);
-    console.log("First 2000 chars:", text.substring(0, 2000));
-
-    // Detect type
-    const isMensalidade = text.includes("FATURA") || text.includes("VENCIMENTO") || text.includes("Mensalidade");
-    const isCoparticipacao = text.includes("COPARTICIPA") || text.includes("Remessa") || text.includes("REMESSA");
+    // Detect type based on content
+    const upperText = text.toUpperCase();
+    const isMensalidade = upperText.includes("FATURA MENSAL") || upperText.includes("ANALÍTICO FATURA");
+    const isCoparticipacao = upperText.includes("CO-PARTICIPAÇÃO") || upperText.includes("COPARTICIPA") || upperText.includes("REMESSA");
 
     let tipo: string;
     let result: any;
@@ -52,11 +47,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Record upload
-    await supabase.from("uploads").insert({
-      tipo,
-      nome_arquivo: file.name,
-    });
+    await supabase.from("uploads").insert({ tipo, nome_arquivo: filename });
 
     return new Response(JSON.stringify({ tipo, ...result }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -70,184 +61,187 @@ Deno.serve(async (req) => {
   }
 });
 
-function extractTextFromPdf(bytes: Uint8Array): string {
-  // Simple PDF text extraction - finds text between stream markers
-  const decoder = new TextDecoder("latin1");
-  const raw = decoder.decode(bytes);
-  
-  const textParts: string[] = [];
-  
-  // Extract text from PDF streams
-  let idx = 0;
-  while (idx < raw.length) {
-    const streamStart = raw.indexOf("stream\r\n", idx);
-    if (streamStart === -1) {
-      const streamStart2 = raw.indexOf("stream\n", idx);
-      if (streamStart2 === -1) break;
-      idx = streamStart2 + 7;
-    } else {
-      idx = streamStart + 8;
-    }
-    
-    const streamEnd = raw.indexOf("endstream", idx);
-    if (streamEnd === -1) break;
-    
-    const content = raw.substring(idx, streamEnd);
-    idx = streamEnd + 9;
-    
-    // Extract text operators: Tj, TJ, '
-    const tjMatches = content.matchAll(/\(([^)]*)\)\s*Tj/g);
-    for (const m of tjMatches) {
-      textParts.push(m[1]);
-    }
-    
-    const tjArrayMatches = content.matchAll(/\[([^\]]*)\]\s*TJ/g);
-    for (const m of tjArrayMatches) {
-      const inner = m[1];
-      const strings = inner.matchAll(/\(([^)]*)\)/g);
-      let line = "";
-      for (const s of strings) {
-        line += s[1];
-      }
-      if (line.trim()) textParts.push(line);
-    }
-  }
-  
-  // Also try to find raw text patterns
-  const rawTextMatches = raw.matchAll(/BT\s*([\s\S]*?)ET/g);
-  for (const m of rawTextMatches) {
-    const block = m[1];
-    const strings = block.matchAll(/\(([^)]*)\)/g);
-    for (const s of strings) {
-      if (s[1].trim() && !textParts.includes(s[1])) {
-        textParts.push(s[1]);
-      }
-    }
-  }
-  
-  return textParts.join("\n");
-}
-
-async function getOrCreateTitular(supabase: any, nome: string, matricula?: string, cpf?: string) {
-  // Try to find by name first
+async function getOrCreateTitular(supabase: any, nome: string, cpf?: string) {
+  const cleanName = nome.trim().toUpperCase();
   const { data: existing } = await supabase
     .from("titulares")
     .select("id")
-    .eq("nome", nome.trim().toUpperCase())
+    .eq("nome", cleanName)
     .maybeSingle();
-
   if (existing) return existing.id;
 
+  const insertData: any = { nome: cleanName };
+  if (cpf) insertData.cpf = cpf.replace(/[^0-9]/g, "");
   const { data: created, error } = await supabase
     .from("titulares")
-    .insert({ nome: nome.trim().toUpperCase(), matricula, cpf })
+    .insert(insertData)
     .select("id")
     .single();
-
   if (error) throw error;
   return created.id;
 }
 
-async function getOrCreateDependente(supabase: any, titularId: string, nome: string, matricula?: string) {
+async function getOrCreateDependente(supabase: any, titularId: string, nome: string, cpf?: string) {
+  const cleanName = nome.trim().toUpperCase();
   const { data: existing } = await supabase
     .from("dependentes")
     .select("id")
     .eq("titular_id", titularId)
-    .eq("nome", nome.trim().toUpperCase())
+    .eq("nome", cleanName)
     .maybeSingle();
-
   if (existing) return existing.id;
 
+  const insertData: any = { titular_id: titularId, nome: cleanName };
+  if (cpf) insertData.cpf = cpf.replace(/[^0-9]/g, "");
   const { data: created, error } = await supabase
     .from("dependentes")
-    .insert({ titular_id: titularId, nome: nome.trim().toUpperCase(), matricula })
+    .insert(insertData)
     .select("id")
     .single();
-
   if (error) throw error;
   return created.id;
 }
 
 async function parseMensalidade(supabase: any, text: string) {
-  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-  
-  // Try to extract vencimento (month/year)
+  const lines = text.split("\n");
+
+  // Extract vencimento
   let mes = 0, ano = 0;
   for (const line of lines) {
-    const vencMatch = line.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    const vencMatch = line.match(/Vencimento\s+(\d{2})\/(\d{2})\/(\d{2,4})/i);
     if (vencMatch) {
-      mes = parseInt(vencMatch[1]) || parseInt(vencMatch[2]);
+      const day = parseInt(vencMatch[1]);
+      mes = parseInt(vencMatch[2]);
       ano = parseInt(vencMatch[3]);
-      if (ano > 0 && mes > 0 && mes <= 12) break;
+      if (ano < 100) ano += 2000;
+      break;
     }
   }
-  
-  // If no date found, try month names
+
   if (mes === 0) {
-    const meses: Record<string, number> = {
-      "JANEIRO": 1, "FEVEREIRO": 2, "MARCO": 3, "MARÇO": 3, "ABRIL": 4,
-      "MAIO": 5, "JUNHO": 6, "JULHO": 7, "AGOSTO": 8, "SETEMBRO": 9,
-      "OUTUBRO": 10, "NOVEMBRO": 11, "DEZEMBRO": 12
-    };
-    for (const line of lines) {
-      for (const [mName, mNum] of Object.entries(meses)) {
-        if (line.toUpperCase().includes(mName)) {
-          mes = mNum;
-          const yearMatch = line.match(/(\d{4})/);
-          if (yearMatch) ano = parseInt(yearMatch[1]);
-          break;
+    const now = new Date();
+    mes = now.getMonth() + 1;
+    ano = now.getFullYear();
+  }
+
+  // Parse titulares and their beneficiaries
+  // Pattern: "Titular      NAME                    CPF   XXXX"
+  // Then credential lines with: CREDENTIAL CPF BENEFICIARIO PAREN. ... Mensalidade ... Cobrado
+  
+  interface Beneficiario {
+    nome: string;
+    cpf: string;
+    parentesco: string;
+    mensalidade: number;
+    cobrado: number;
+    titularNome: string;
+    titularCpf: string;
+  }
+
+  const beneficiarios: Beneficiario[] = [];
+  let currentTitular = "";
+  let currentTitularCpf = "";
+  const processedTitulares = new Set<string>();
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Match titular line: "Titular      NAME       CPF   XXXXX"
+    const titularMatch = line.match(/^Titular\s+(.+?)\s{2,}CPF\s+(\d+)/i);
+    if (titularMatch) {
+      currentTitular = titularMatch[1].trim();
+      currentTitularCpf = titularMatch[2].trim();
+      continue;
+    }
+
+    // Match credential line with values
+    // Pattern: CREDENTIAL CPF BENEFICIARIO PARENTESCO ... MENSALIDADE ... COBRADO
+    const credMatch = line.match(
+      /^\S+\.\d+-\d+\s+\d+\s+[\d-]+\s+(.+?)\s+(TITULAR|FILHO\(A\)|CONJUGE|COMPANHEIRO)\s+.+?\s+(\d+[.,]\d{2})\s+[\d.,]+\s+[\d.,]+\s+[\d.,]+\s+([\d.,]+)\s*$/
+    );
+    if (credMatch && currentTitular) {
+      const benefNome = credMatch[1].trim();
+      const parentesco = credMatch[2];
+      const mensalidade = parseFloat(credMatch[3].replace(",", "."));
+      const cobrado = parseFloat(credMatch[4].replace(",", "."));
+
+      // Skip zero-value entries (like odonto plans with 0.00)
+      if (cobrado > 0) {
+        beneficiarios.push({
+          nome: benefNome,
+          cpf: "",
+          parentesco,
+          mensalidade,
+          cobrado,
+          titularNome: currentTitular,
+          titularCpf: currentTitularCpf,
+        });
+      }
+      continue;
+    }
+
+    // Simpler match for lines that may have different spacing
+    if (currentTitular && line.match(/^\S+\.\d+-\d+/)) {
+      // Try to extract the last numeric value as cobrado
+      const nums = [...line.matchAll(/([\d]+[.,]\d{2})/g)].map(m => parseFloat(m[1].replace(",", ".")));
+      if (nums.length >= 2) {
+        const cobrado = nums[nums.length - 1];
+        const mensalidade = nums.find(n => n > 0) || 0;
+        
+        // Extract name - it's after the CPF field
+        const nameMatch = line.match(/[\d-]+\s+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)\s+(TITULAR|FILHO\(A\)|CONJUGE)/);
+        if (nameMatch && cobrado > 0) {
+          beneficiarios.push({
+            nome: nameMatch[1].trim(),
+            cpf: "",
+            parentesco: nameMatch[2],
+            mensalidade: cobrado,
+            cobrado,
+            titularNome: currentTitular,
+            titularCpf: currentTitularCpf,
+          });
         }
       }
-      if (mes > 0) break;
     }
   }
 
-  if (mes === 0 || ano === 0) {
-    // Default to current date if can't parse
-    const now = new Date();
-    if (mes === 0) mes = now.getMonth() + 1;
-    if (ano === 0) ano = now.getFullYear();
-  }
-
-  // Parse beneficiaries and values
-  // Look for patterns like: NAME ... VALUE
-  const beneficiarios: Array<{ nome: string; valor: number; tipo: "titular" | "dependente" }> = [];
-  
-  for (const line of lines) {
-    // Match lines with name and monetary value
-    const match = line.match(/^([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+)\s+.*?(\d+[.,]\d{2})\s*$/);
-    if (match) {
-      const nome = match[1].trim();
-      const valor = parseFloat(match[2].replace(",", "."));
-      if (nome.length > 3 && valor > 0) {
-        beneficiarios.push({ nome, valor, tipo: beneficiarios.length === 0 ? "titular" : "dependente" });
-      }
-    }
-  }
-
+  // Now save to database
   let titularesProcessados = 0;
   let dependentesProcessados = 0;
 
-  if (beneficiarios.length > 0) {
-    const titularNome = beneficiarios[0].nome;
-    const titularId = await getOrCreateTitular(supabase, titularNome);
+  // Group by titular
+  const titularGroups = new Map<string, Beneficiario[]>();
+  for (const b of beneficiarios) {
+    const key = b.titularNome;
+    const arr = titularGroups.get(key) || [];
+    arr.push(b);
+    titularGroups.set(key, arr);
+  }
 
-    // Upsert mensalidade for titular
-    await supabase.from("mensalidades").upsert(
-      { titular_id: titularId, dependente_id: null, mes, ano, valor: beneficiarios[0].valor },
-      { onConflict: "titular_id,dependente_id,mes,ano" }
-    );
-    titularesProcessados = 1;
+  for (const [titularNome, members] of titularGroups) {
+    if (processedTitulares.has(titularNome)) continue;
+    processedTitulares.add(titularNome);
 
-    // Process dependentes
-    for (let i = 1; i < beneficiarios.length; i++) {
-      const dep = beneficiarios[i];
-      const depId = await getOrCreateDependente(supabase, titularId, dep.nome);
-      await supabase.from("mensalidades").upsert(
-        { titular_id: titularId, dependente_id: depId, mes, ano, valor: dep.valor },
-        { onConflict: "titular_id,dependente_id,mes,ano" }
-      );
-      dependentesProcessados++;
+    const titularCpf = members[0]?.titularCpf;
+    const titularId = await getOrCreateTitular(supabase, titularNome, titularCpf);
+
+    for (const member of members) {
+      if (member.parentesco === "TITULAR") {
+        // Upsert titular mensalidade
+        await supabase.from("mensalidades").upsert(
+          { titular_id: titularId, dependente_id: null, mes, ano, valor: member.cobrado },
+          { onConflict: "titular_id,dependente_id,mes,ano" }
+        );
+        titularesProcessados++;
+      } else {
+        // Create dependente and upsert mensalidade
+        const depId = await getOrCreateDependente(supabase, titularId, member.nome);
+        await supabase.from("mensalidades").upsert(
+          { titular_id: titularId, dependente_id: depId, mes, ano, valor: member.cobrado },
+          { onConflict: "titular_id,dependente_id,mes,ano" }
+        );
+        dependentesProcessados++;
+      }
     }
   }
 
@@ -261,21 +255,28 @@ async function parseMensalidade(supabase: any, text: string) {
 }
 
 async function parseCoparticipacao(supabase: any, text: string) {
-  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-  
-  // Try to find period (month/year)
+  const lines = text.split("\n");
+
+  // Extract period from header line like: "1010568516705 15/08/2025  128,20"
   let mes = 0, ano = 0;
   for (const line of lines) {
-    const periodMatch = line.match(/(\d{2})\/(\d{4})/);
+    const periodMatch = line.match(/\d{10,}\s+\d{2}\/(\d{2})\/(\d{4})/);
     if (periodMatch) {
       mes = parseInt(periodMatch[1]);
       ano = parseInt(periodMatch[2]);
-      if (mes > 0 && mes <= 12) break;
+      break;
     }
-    const dateMatch = line.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-    if (dateMatch && mes === 0) {
-      mes = parseInt(dateMatch[2]);
-      ano = parseInt(dateMatch[3]);
+  }
+
+  if (mes === 0) {
+    // Try date format in procedure lines
+    for (const line of lines) {
+      const dateMatch = line.match(/\d{2}\/(\d{2})\/(\d{4})/);
+      if (dateMatch) {
+        mes = parseInt(dateMatch[1]);
+        ano = parseInt(dateMatch[2]);
+        break;
+      }
     }
   }
 
@@ -285,98 +286,112 @@ async function parseCoparticipacao(supabase: any, text: string) {
     if (ano === 0) ano = now.getFullYear();
   }
 
-  // Parse coparticipacao entries
-  // Look for: name, date, procedure, location, value patterns
-  const entries: Array<{
-    nome_usuario: string;
-    data_utilizacao: string | null;
+  // Parse structure:
+  // "0CC21000004-ADRIANE NASCIMENTO DE BRITO" => titular block
+  // "Cod. Usuario  Matricula  Cpf  Nome"
+  // "0CC21000004022   6677952606  DANIEL MORAES DE BRITO" => user who used
+  // "T99883893   15/07/2025   15/07/2025   00010014 - CONSULTA...   TELECONSULTA   1   25,64" => procedure
+
+  interface CopartEntry {
+    titularCode: string;
+    titularNome: string;
+    nomeUsuario: string;
+    cpfUsuario: string;
     procedimento: string;
     local: string;
+    dataUtilizacao: string;
+    quantidade: number;
     valor: number;
-  }> = [];
+  }
 
-  let currentName = "";
-  
+  const entries: CopartEntry[] = [];
+  let currentTitularCode = "";
+  let currentTitularNome = "";
+  let currentUserNome = "";
+  let currentUserCpf = "";
+
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    
-    // Check for date pattern at start of line (dd/mm/yyyy)
-    const dateLineMatch = line.match(/^(\d{2}\/\d{2}\/\d{4})/);
-    if (dateLineMatch) {
-      // This line likely has procedure info
-      const data = dateLineMatch[1];
-      const rest = line.substring(data.length).trim();
-      
-      // Try to extract value from end
-      const valMatch = rest.match(/(\d+[.,]\d{2})\s*$/);
-      if (valMatch) {
-        const valor = parseFloat(valMatch[1].replace(",", "."));
-        const procedimentoLocal = rest.substring(0, rest.length - valMatch[0].length).trim();
-        
-        entries.push({
-          nome_usuario: currentName || "DESCONHECIDO",
-          data_utilizacao: data.split("/").reverse().join("-"), // Convert to YYYY-MM-DD
-          procedimento: procedimentoLocal,
-          local: "",
-          valor,
-        });
-      }
-    } else if (line.match(/^[A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]{5,}$/) && !line.match(/HAPVIDA|COPARTICIPA|REMESSA|EMPRESA|TOTAL|SUBTOTAL/i)) {
-      // Likely a name
-      currentName = line.trim();
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // Match titular block: "0CC21000004-ADRIANE NASCIMENTO DE BRITO"
+    const titularBlockMatch = line.match(/^(\w+\d+)-([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+)$/);
+    if (titularBlockMatch) {
+      currentTitularCode = titularBlockMatch[1];
+      currentTitularNome = titularBlockMatch[2].trim();
+      currentUserNome = "";
+      currentUserCpf = "";
+      continue;
+    }
+
+    // Match user line (after "Cod. Usuario" header): "0CC21000004022    6677952606   DANIEL MORAES DE BRITO"
+    const userMatch = line.match(/^\w+\d{3,}\s+(\d{10,})\s+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+)$/);
+    if (userMatch && currentTitularNome) {
+      currentUserCpf = userMatch[1];
+      currentUserNome = userMatch[2].trim();
+      continue;
+    }
+
+    // Match procedure line: "T99883893   15/07/2025   15/07/2025   00010014 - CONSULTA EM CONSULTORIO   TELECONSULTA   1   25,64"
+    const procMatch = line.match(
+      /^[A-Z]\d+\s+(\d{2}\/\d{2}\/\d{4})\s+\d{2}\/\d{2}\/\d{4}\s+\d+\s*-\s*(.+?)\s{2,}(.+?)\s+(\d+)\s+([\d.,]+)\s*$/
+    );
+    if (procMatch && currentTitularNome) {
+      const dataStr = procMatch[1];
+      const procedimento = procMatch[2].trim();
+      const local = procMatch[3].trim();
+      const quantidade = parseInt(procMatch[4]);
+      const valor = parseFloat(procMatch[5].replace(".", "").replace(",", "."));
+
+      entries.push({
+        titularCode: currentTitularCode,
+        titularNome: currentTitularNome,
+        nomeUsuario: currentUserNome || currentTitularNome,
+        cpfUsuario: currentUserCpf,
+        procedimento,
+        local,
+        dataUtilizacao: dataStr.split("/").reverse().join("-"),
+        quantidade,
+        valor,
+      });
     }
   }
 
-  // Group by name and save
-  const nameGroups = new Map<string, typeof entries>();
-  for (const entry of entries) {
-    const arr = nameGroups.get(entry.nome_usuario) || [];
-    arr.push(entry);
-    nameGroups.set(entry.nome_usuario, arr);
+  console.log("Parsed coparticipacao entries:", entries.length);
+
+  // Group by user and save
+  const userGroups = new Map<string, CopartEntry[]>();
+  for (const e of entries) {
+    const key = `${e.titularNome}|${e.nomeUsuario}`;
+    const arr = userGroups.get(key) || [];
+    arr.push(e);
+    userGroups.set(key, arr);
   }
 
   let coparticipacoesCriadas = 0;
   let itensCriados = 0;
 
-  // For each user, find or create titular/dependente and save coparticipacao
-  for (const [nomeUsuario, userEntries] of nameGroups) {
-    // Try to find as titular first
-    const { data: titular } = await supabase
-      .from("titulares")
-      .select("id")
-      .eq("nome", nomeUsuario.toUpperCase())
-      .maybeSingle();
+  for (const [key, userEntries] of userGroups) {
+    const titularNome = userEntries[0].titularNome;
+    const nomeUsuario = userEntries[0].nomeUsuario;
 
-    let titularId: string;
+    // Get or create titular
+    const titularId = await getOrCreateTitular(supabase, titularNome);
+
+    // Determine if user is titular or dependente
     let dependenteId: string | null = null;
-
-    if (titular) {
-      titularId = titular.id;
-    } else {
-      // Check if dependente
-      const { data: dep } = await supabase
-        .from("dependentes")
-        .select("id, titular_id")
-        .eq("nome", nomeUsuario.toUpperCase())
-        .maybeSingle();
-
-      if (dep) {
-        titularId = dep.titular_id;
-        dependenteId = dep.id;
-      } else {
-        // Create as new titular
-        titularId = await getOrCreateTitular(supabase, nomeUsuario);
-      }
+    if (nomeUsuario.toUpperCase() !== titularNome.toUpperCase()) {
+      dependenteId = await getOrCreateDependente(supabase, titularId, nomeUsuario, userEntries[0].cpfUsuario);
     }
 
-    // Create coparticipacao record
+    // Create coparticipacao
     const { data: copart, error: copartError } = await supabase
       .from("coparticipacoes")
       .insert({
         titular_id: titularId,
         dependente_id: dependenteId,
         nome_usuario: nomeUsuario.toUpperCase(),
-        data_utilizacao: userEntries[0]?.data_utilizacao || null,
+        data_utilizacao: userEntries[0].dataUtilizacao,
         mes,
         ano,
       })
@@ -390,20 +405,17 @@ async function parseCoparticipacao(supabase: any, text: string) {
 
     coparticipacoesCriadas++;
 
-    // Insert items
     const items = userEntries.map((e) => ({
       coparticipacao_id: copart.id,
-      procedimento: e.procedimento || "Procedimento não identificado",
-      local: e.local || null,
-      quantidade: 1,
+      procedimento: e.procedimento,
+      local: e.local,
+      quantidade: e.quantidade,
       valor: e.valor,
     }));
 
-    if (items.length > 0) {
-      const { error: itemsError } = await supabase.from("coparticipacao_itens").insert(items);
-      if (itemsError) console.error("Error inserting items:", itemsError);
-      else itensCriados += items.length;
-    }
+    const { error: itemsError } = await supabase.from("coparticipacao_itens").insert(items);
+    if (itemsError) console.error("Error inserting items:", itemsError);
+    else itensCriados += items.length;
   }
 
   return {
@@ -411,6 +423,6 @@ async function parseCoparticipacao(supabase: any, text: string) {
     ano,
     coparticipacoes_criadas: coparticipacoesCriadas,
     itens_criados: itensCriados,
-    usuarios_encontrados: nameGroups.size,
+    usuarios_encontrados: userGroups.size,
   };
 }
