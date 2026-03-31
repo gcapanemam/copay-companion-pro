@@ -168,12 +168,14 @@ async function parseMensalidade(supabase: any, text: string) {
       
       if (cobrado <= 0) continue;
       
-      // Extract beneficiary name: between CPF (format XXX-XX) and parentesco
+      // Extract beneficiary name: between the last CPF pattern (9+ digits dash 2 digits) and parentesco
       const beforeParentesco = line.substring(0, parentescoIdx).trim();
-      // Find the CPF pattern (XXX-XX) and get everything after it
-      const cpfEndMatch = beforeParentesco.match(/\d{3}-\d{2}\s+(.+)$/);
-      if (cpfEndMatch) {
-        const nome = cpfEndMatch[1].trim().replace(/\s+/g, " ");
+      // Find the LAST CPF-like pattern (long number followed by -XX) and get the name after it
+      const allCpfMatches = [...beforeParentesco.matchAll(/\d{7,}-\d{2}\s+/g)];
+      if (allCpfMatches.length > 0) {
+        const lastCpfMatch = allCpfMatches[allCpfMatches.length - 1];
+        const nameStart = (lastCpfMatch.index || 0) + lastCpfMatch[0].length;
+        const nome = beforeParentesco.substring(nameStart).trim().replace(/\s+/g, " ");
         if (nome.length > 2) {
           beneficiarios.push({
             nome,
