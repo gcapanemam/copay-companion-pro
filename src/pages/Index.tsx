@@ -5,7 +5,7 @@ import { SeletorAno } from "@/components/SeletorAno";
 import { Activity } from "lucide-react";
 
 const Index = () => {
-  const [ano, setAno] = useState(new Date().getFullYear());
+  const [ano, setAno] = useState(2025);
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
