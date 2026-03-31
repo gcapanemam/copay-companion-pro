@@ -1,16 +1,31 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from "react";
+import { UploadArea } from "@/components/UploadArea";
+import { TabelaAnual } from "@/components/TabelaAnual";
+import { SeletorAno } from "@/components/SeletorAno";
+import { Activity } from "lucide-react";
 
-// IMPORTANT: Fully REPLACE this with your own code
-const PlaceholderIndex = () => {
-  // PLACEHOLDER: Replace this entire return statement with the user's app.
-  // The inline background color is intentionally not part of the design system.
+const Index = () => {
+  const [ano, setAno] = useState(new Date().getFullYear());
+  const [refreshKey, setRefreshKey] = useState(0);
+
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
+    <div className="min-h-screen bg-background">
+      <header className="border-b bg-card">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Activity className="h-6 w-6 text-primary" />
+            <h1 className="text-xl font-bold text-foreground">Controle Plano de Saúde</h1>
+          </div>
+          <SeletorAno ano={ano} onAnoChange={setAno} />
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-6 space-y-6">
+        <UploadArea onUploadComplete={() => setRefreshKey((k) => k + 1)} />
+        <TabelaAnual ano={ano} refreshKey={refreshKey} />
+      </main>
     </div>
   );
 };
-
-const Index = PlaceholderIndex;
 
 export default Index;

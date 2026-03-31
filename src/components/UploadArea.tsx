@@ -1,0 +1,114 @@
+import { useState, useCallback } from "react";
+import { Upload, FileText, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+
+interface UploadAreaProps {
+  onUploadComplete: () => void;
+}
+
+export function UploadArea({ onUploadComplete }: UploadAreaProps) {
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [lastResult, setLastResult] = useState<{ tipo: string; message: string } | null>(null);
+  const { toast } = useToast();
+
+  const handleFile = useCallback(async (file: File) => {
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      toast({ title: "Erro", description: "Apenas arquivos PDF são aceitos.", variant: "destructive" });
+      return;
+    }
+
+    setUploading(true);
+    setLastResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const { data, error } = await supabase.functions.invoke("parse-pdf", {
+        body: formData,
+      });
+
+      if (error) throw error;
+
+      const tipo = data.tipo === "mensalidade" ? "Fatura Mensal" : "Coparticipação";
+      const message = data.tipo === "mensalidade"
+        ? `${data.beneficiarios_encontrados} beneficiário(s) processado(s) para ${data.mes}/${data.ano}`
+        : `${data.usuarios_encontrados} usuário(s), ${data.itens_criados} procedimento(s) para ${data.mes}/${data.ano}`;
+
+      setLastResult({ tipo, message });
+      toast({ title: `${tipo} processada`, description: message });
+      onUploadComplete();
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      toast({ title: "Erro no upload", description: err.message || "Falha ao processar PDF", variant: "destructive" });
+      setLastResult(null);
+    } finally {
+      setUploading(false);
+    }
+  }, [onUploadComplete, toast]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  }, [handleFile]);
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+    e.target.value = "";
+  }, [handleFile]);
+
+  return (
+    <Card className="border-dashed border-2 transition-colors hover:border-primary/50">
+      <CardContent className="p-6">
+        <div
+          className={`flex flex-col items-center justify-center gap-3 rounded-lg p-8 transition-colors ${
+            isDragging ? "bg-primary/10" : "bg-muted/30"
+          }`}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+        >
+          {uploading ? (
+            <>
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Processando PDF...</p>
+            </>
+          ) : lastResult ? (
+            <>
+              <CheckCircle2 className="h-10 w-10 text-green-600" />
+              <p className="font-medium text-sm">{lastResult.tipo}</p>
+              <p className="text-sm text-muted-foreground">{lastResult.message}</p>
+              <Button variant="outline" size="sm" onClick={() => setLastResult(null)}>
+                Enviar outro arquivo
+              </Button>
+            </>
+          ) : (
+            <>
+              <Upload className="h-10 w-10 text-muted-foreground" />
+              <div className="text-center">
+                <p className="font-medium text-sm">Arraste um PDF da Hapvida aqui</p>
+                <p className="text-xs text-muted-foreground mt-1">Fatura mensal ou relatório de coparticipação</p>
+              </div>
+              <label>
+                <Button variant="outline" size="sm" asChild>
+                  <span>
+                    <FileText className="h-4 w-4 mr-1" />
+                    Selecionar arquivo
+                  </span>
+                </Button>
+                <input type="file" accept=".pdf" className="hidden" onChange={handleFileInput} />
+              </label>
+            </>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
