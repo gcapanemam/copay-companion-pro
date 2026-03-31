@@ -1,5 +1,27 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+
+// Simple password hashing using Web Crypto API (available in Deno edge runtime)
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" }, keyMaterial, 256);
+  const hashArray = new Uint8Array(bits);
+  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, "0")).join("");
+  const hashHex = Array.from(hashArray).map(b => b.toString(16).padStart(2, "0")).join("");
+  return `${saltHex}:${hashHex}`;
+}
+
+async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [saltHex, hashHex] = stored.split(":");
+  if (!saltHex || !hashHex) return false;
+  const salt = new Uint8Array(saltHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" }, keyMaterial, 256);
+  const newHashHex = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return newHashHex === hashHex;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -76,7 +98,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      const hash = await bcrypt.hash(senha);
+      const hash = await hashPassword(senha);
 
       const { error } = await supabase.from("beneficiario_senhas").upsert(
         { cpf: cleanCpf, senha_hash: hash },
@@ -112,7 +134,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      const valid = await bcrypt.compare(senha, senhaRecord.senha_hash);
+      const valid = await verifyPassword(senha, senhaRecord.senha_hash);
       if (!valid) {
         return new Response(JSON.stringify({ error: "Senha incorreta" }), {
           status: 401,
