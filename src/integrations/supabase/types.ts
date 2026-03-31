@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      beneficiario_senhas: {
+        Row: {
+          cpf: string
+          created_at: string
+          id: string
+          senha_hash: string
+        }
+        Insert: {
+          cpf: string
+          created_at?: string
+          id?: string
+          senha_hash: string
+        }
+        Update: {
+          cpf?: string
+          created_at?: string
+          id?: string
+          senha_hash?: string
+        }
+        Relationships: []
+      }
       coparticipacao_itens: {
         Row: {
           coparticipacao_id: string
