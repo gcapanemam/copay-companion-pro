@@ -121,15 +121,15 @@ export function TabelaAnual({ ano, refreshKey }: TabelaAnualProps) {
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border">
+      <div className="overflow-auto rounded-lg border max-h-[70vh]">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-20 bg-muted">
             <TableRow className="bg-muted/50">
-              <TableHead className="sticky left-0 bg-muted/50 z-10 min-w-[200px]">Beneficiário</TableHead>
+              <TableHead className="sticky left-0 z-30 bg-muted min-w-[200px]">Beneficiário</TableHead>
               {MESES_CURTO.map((m, i) => (
-                <TableHead key={i} className="text-center min-w-[110px]">{m}</TableHead>
+                <TableHead key={i} className="text-center min-w-[110px] bg-muted">{m}</TableHead>
               ))}
-              <TableHead className="text-center min-w-[110px] font-bold">Total</TableHead>
+              <TableHead className="text-center min-w-[110px] font-bold bg-muted">Total</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
