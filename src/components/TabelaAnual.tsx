@@ -125,7 +125,7 @@ export function TabelaAnual({ ano, refreshKey }: TabelaAnualProps) {
         <Table>
           <TableHeader className="sticky top-0 z-20 bg-muted">
             <TableRow className="bg-muted/50">
-              <TableHead className="sticky left-0 z-30 bg-muted min-w-[200px]">Beneficiário</TableHead>
+              <TableHead className="sticky left-0 z-30 bg-muted min-w-[200px] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">Beneficiário</TableHead>
               {MESES_CURTO.map((m, i) => (
                 <TableHead key={i} className="text-center min-w-[110px] bg-muted">{m}</TableHead>
               ))}
