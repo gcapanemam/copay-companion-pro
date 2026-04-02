@@ -84,6 +84,17 @@ const Index = () => {
               </Button>
             </NavLink>
             <SeletorAno ano={ano} onAnoChange={setAno} />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                await supabase.auth.signOut();
+                window.location.href = "/login";
+              }}
+            >
+              <LogOut className="h-4 w-4 mr-1" />
+              Sair
+            </Button>
           </div>
         </div>
       </header>
