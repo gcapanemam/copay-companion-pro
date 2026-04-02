@@ -2,7 +2,7 @@ import { useState } from "react";
 import { UploadArea } from "@/components/UploadArea";
 import { TabelaAnual } from "@/components/TabelaAnual";
 import { SeletorAno } from "@/components/SeletorAno";
-import { Activity, Trash2, ExternalLink } from "lucide-react";
+import { Activity, Trash2, ExternalLink, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -84,6 +84,17 @@ const Index = () => {
               </Button>
             </NavLink>
             <SeletorAno ano={ano} onAnoChange={setAno} />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                await supabase.auth.signOut();
+                window.location.href = "/login";
+              }}
+            >
+              <LogOut className="h-4 w-4 mr-1" />
+              Sair
+            </Button>
           </div>
         </div>
       </header>
