@@ -3,8 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Eye, Loader2 } from "lucide-react";
+import { Eye, Loader2, FileSpreadsheet } from "lucide-react";
 import { DialogExames } from "./DialogExames";
+import * as XLSX from "xlsx";
 
 const MESES_CURTO = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -119,8 +120,66 @@ export function TabelaAnual({ ano, refreshKey }: TabelaAnualProps) {
     }
   }
 
+  function exportToExcel() {
+    // Header row
+    const header = ["Beneficiário", ...MESES_CURTO.map(m => `${m} Plano`), ...MESES_CURTO.map(m => `${m} Copart`), "Total Plano", "Total Copart", "Total Geral"];
+    const dataRows = rows.map((row) => {
+      const planoVals = Array.from({ length: 12 }, (_, i) => getMensalidade(row.titularId, row.dependenteId, i + 1));
+      const copartVals = Array.from({ length: 12 }, (_, i) => getCoparticipacaoTotal(row.titularId, row.dependenteId, i + 1));
+      const totalPlano = planoVals.reduce((a, b) => a + b, 0);
+      const totalCopart = copartVals.reduce((a, b) => a + b, 0);
+      return [
+        row.isTitular ? row.nome : `  ↳ ${row.nome}`,
+        ...planoVals.map(v => v || ""),
+        ...copartVals.map(v => v || ""),
+        totalPlano || "",
+        totalCopart || "",
+        (totalPlano + totalCopart) || "",
+      ];
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+
+    // Set column widths
+    ws["!cols"] = [{ wch: 30 }, ...Array(26).fill({ wch: 14 })];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `Plano ${ano}`);
+
+    // Detalhamento coparticipação
+    const detRows: any[][] = [["Beneficiário", "Mês", "Procedimento", "Local", "Qtd", "Valor"]];
+    for (const row of rows) {
+      for (let mes = 1; mes <= 12; mes++) {
+        const itens = getCoparticipacaoItens(row.titularId, row.dependenteId, mes);
+        for (const item of itens) {
+          detRows.push([
+            row.nome,
+            MESES_CURTO[mes - 1],
+            item.procedimento,
+            item.local || "",
+            item.quantidade,
+            item.valor,
+          ]);
+        }
+      }
+    }
+    if (detRows.length > 1) {
+      const wsDet = XLSX.utils.aoa_to_sheet(detRows);
+      wsDet["!cols"] = [{ wch: 30 }, { wch: 8 }, { wch: 40 }, { wch: 30 }, { wch: 6 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, wsDet, "Detalhamento Copart");
+    }
+
+    XLSX.writeFile(wb, `Plano_Saude_${ano}.xlsx`);
+  }
+
   return (
     <>
+      <div className="flex justify-end mb-2">
+        <Button variant="outline" size="sm" onClick={exportToExcel}>
+          <FileSpreadsheet className="h-4 w-4 mr-1" />
+          Exportar Excel
+        </Button>
+      </div>
       <div className="overflow-auto rounded-lg border max-h-[70vh]">
         <Table>
           <TableHeader className="sticky top-0 z-20 bg-muted">
