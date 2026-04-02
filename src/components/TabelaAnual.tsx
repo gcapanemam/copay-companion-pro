@@ -139,7 +139,7 @@ export function TabelaAnual({ ano, refreshKey }: TabelaAnualProps) {
 
               return (
                 <TableRow key={rowIdx} className={row.isTitular ? "bg-primary/5" : ""}>
-                  <TableCell className={`sticky left-0 z-10 ${row.isTitular ? "bg-blue-50 dark:bg-primary/10 font-semibold" : "bg-background pl-8"} border-r`}>
+                  <TableCell className={`sticky left-0 z-10 ${row.isTitular ? "bg-primary/5 font-semibold" : "bg-background pl-8"} border-r shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]`}>
                     {row.isTitular ? row.nome : `↳ ${row.nome}`}
                   </TableCell>
                   {Array.from({ length: 12 }, (_, mesIdx) => {
