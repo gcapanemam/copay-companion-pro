@@ -101,6 +101,95 @@ export function AdminAdmissaoCampos() {
     queryClient.invalidateQueries({ queryKey: ["admissao-campos"] });
   };
 
+  const COLUMN_MAP: Record<string, string> = {
+    "Unidade": "unidade",
+    "Nome Completo": "nome_completo",
+    "Data de Nascimento": "data_nascimento",
+    "CPF (somente números, sem traço nem pontos)": "cpf",
+    "RG": "rg",
+    "DATA EXPEDIÇÃO RG": "data_expedicao_rg",
+    "Títutlo de Eleitor": "titulo_eleitor",
+    "Número do PIS (somente números, sem traço nem pontos)": "numero_pis",
+    "DATA CADASTRO PIS": "data_cadastro_pis",
+    "Número da Carteira de Trabalho": "numero_ctps",
+    "Série da Carteira de Trabalho": "serie_ctps",
+    "Emissão da Carteira de Trabalho": "emissao_ctps",
+    "Estado Civil": "estado_civil",
+    "Grau de Escolaridade": "escolaridade",
+    "Endereço Completo (rua, número)": "endereco",
+    "Bairro": "bairro",
+    "CEP": "cep",
+    "Nome da Mãe": "nome_mae",
+    "Nome do Pai": "nome_pai",
+    "Local de Nascimento (Cidade)": "local_nascimento",
+    "Sexo": "sexo",
+    "Primeiro Emprego?": "primeiro_emprego",
+    "Irá precisar de vale transporte?": "vale_transporte",
+    "Horário de Trabalho": "horario_trabalho",
+    "Se marcou Sim para Vale transporte, especificar ônibus e valores por dia.": "detalhes_vale_transporte",
+    "Telefone": "telefone",
+    "Conta do Banco ITAÚ (Agência e Conta) - Caso não tenha conta no Banco Itaú, favor realizar a abertura de conta através do aplicativo do Itaú. Ela poderá ser uma conta salário e fazer a portabilidade para sua conta atual. Caso não tenha conta bo Banco Itaú, favor informar seu PIX.": "dados_bancarios",
+    "E-mail pessoal": "email",
+    "Cor": "cor",
+    "CPF dos dependentes de você (no Imposto de Renda) caso sejam maiores de 14 anos": "cpf_dependentes",
+    "Nome Completo do Conjuge (se aplicável)": "nome_conjuge",
+    "CPF do Conjuge (se aplicável)": "cpf_conjuge",
+    "Função que exercerá na empresa:": "funcao",
+    "Filhos ou Cônjuge são dependentes na Declaração de IR? Se sim, detalhar quais são.": "dependentes_ir",
+    "Qual primeiro dia de trabalho aqui na escola?": "primeiro_dia_trabalho",
+    "Você tem interesse em contratar o plano?": "interesse_plano",
+    "Tenho interesse no seguinte plano: obs: o plano escolhido pelo funcionário deve ser o mesmo para seus dependentes.": "plano_escolhido",
+  };
+
+  const handleUploadAdmissao = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows: any[] = XLSX.utils.sheet_to_json(ws);
+
+    let count = 0;
+    for (const row of rows) {
+      const dados: Record<string, any> = {};
+      let nomeCompleto = "";
+      let cpfVal = "";
+
+      for (const [header, value] of Object.entries(row)) {
+        if (header === "Carimbo de data/hora") continue;
+        const fieldName = COLUMN_MAP[header];
+        if (fieldName) {
+          const strVal = String(value || "");
+          if (fieldName === "nome_completo") nomeCompleto = strVal;
+          if (fieldName === "cpf") cpfVal = strVal.replace(/\D/g, "");
+          if (fieldName === "primeiro_emprego") {
+            dados[fieldName] = strVal.toLowerCase().includes("sim");
+          } else if (fieldName === "vale_transporte") {
+            dados[fieldName] = strVal.toLowerCase().includes("sim");
+          } else {
+            dados[fieldName] = strVal;
+          }
+        } else {
+          const slug = header.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60);
+          if (slug) dados[slug] = String(value || "");
+        }
+      }
+
+      if (!nomeCompleto || !cpfVal) continue;
+
+      await supabase.from("admissoes").insert({
+        nome_completo: nomeCompleto,
+        cpf: cpfVal,
+        dados,
+      });
+      count++;
+    }
+
+    toast({ title: `${count} admissões importadas!` });
+    queryClient.invalidateQueries({ queryKey: ["admin-admissoes"] });
+    e.target.value = "";
+  };
+
   const grupos = campos ? [...new Set(campos.map((c) => c.grupo))] : [];
 
   const formatCpf = (v: string) => {
