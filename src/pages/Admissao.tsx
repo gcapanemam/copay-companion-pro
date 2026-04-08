@@ -117,7 +117,7 @@ export default function Admissao() {
       <div className="min-h-screen flex items-center justify-center bg-muted p-4">
         <Card className="max-w-md w-full text-center">
           <CardContent className="pt-8 pb-8 space-y-4">
-            <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto" />
+            <CheckCircle2 className="h-16 w-16 text-primary mx-auto" />
             <h2 className="text-2xl font-bold">Formulário Enviado!</h2>
             <p className="text-muted-foreground">Seus dados de admissão foram recebidos com sucesso. Obrigado!</p>
           </CardContent>
