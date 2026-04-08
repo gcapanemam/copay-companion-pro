@@ -1,56 +1,113 @@
 
 
-# Area do Beneficiario - Login por CPF e Informe IR
+# Portal RH - Sistema Completo para Funcionários
 
 ## Resumo
 
-Criar uma area onde cada beneficiario (titular ou dependente) pode fazer login com CPF e senha, visualizar seus dados de mensalidade e coparticipacao, e gerar um informe para Imposto de Renda.
+Expandir o portal existente (MinhaArea) para um Portal RH completo com 5 módulos, reutilizando o login CPF/senha já implementado. O admin terá telas para cadastrar dados manualmente e via upload. O funcionário verá tudo no seu portal.
 
-## Estrutura
+## Módulos
 
-### 1. Banco de dados
+### 1. Plano de Saúde (já existe)
+- Manter funcionalidade atual em MinhaArea
 
-- Nova tabela `beneficiario_senhas`: `cpf TEXT PRIMARY KEY`, `senha_hash TEXT NOT NULL`, `created_at TIMESTAMPTZ DEFAULT now()`
-- O admin (pagina principal) tera um botao para cadastrar/resetar senha de um beneficiario por CPF
+### 2. Contracheques
+- **Admin**: Upload de PDFs de contracheques, associando ao CPF do funcionário + mês/ano
+- **Funcionário**: Lista de contracheques disponíveis com botão para baixar/visualizar o PDF
+- **Storage**: Bucket `contracheques` no backend para armazenar os PDFs
 
-### 2. Edge Function `login-beneficiario`
+### 3. EPIs (Equipamentos de Proteção Individual)
+- **Admin**: Formulário para registrar entrega de EPI (funcionário, tipo EPI, data entrega, validade, quantidade)
+- **Admin**: Upload de planilha para cadastro em massa
+- **Funcionário**: Lista de EPIs recebidos com status (válido/vencido) e alertas de vencimento
 
-- Recebe `{ cpf, senha }`
-- Valida contra `beneficiario_senhas` (usando bcrypt hash)
-- Se valido, busca o titular ou dependente pelo CPF e retorna todos os dados de mensalidades e coparticipacoes do ano selecionado
-- Retorna os dados diretamente (sem sessao persistente - portal simples)
+### 4. Vale-Transporte
+- **Admin**: Formulário para registrar créditos mensais (funcionário, mês, valor, quantidade de passagens)
+- **Admin**: Upload de planilha para cadastro em massa
+- **Funcionário**: Histórico mensal de vale-transporte recebido
 
-### 3. Novas paginas
+### 5. Controle de Faltas
+- **Admin**: Formulário para registrar faltas (funcionário, data, tipo: falta, atestado, licença, etc.)
+- **Admin**: Upload de planilha para cadastro em massa
+- **Funcionário**: Histórico de faltas com tipo e justificativa
 
-- **`/minha-area`** - Login por CPF + senha, apos login mostra:
-  - Nome do beneficiario
-  - Tabela com mensalidades e coparticipacoes mes a mes
-  - Botao "Informe IR" que gera um resumo anual
+## Estrutura Técnica
 
-### 4. Informe para Imposto de Renda
+### Banco de Dados (novas tabelas)
 
-- Botao gera um resumo em tela (com opcao de imprimir/PDF via `window.print()`)
-- Conteudo: Nome, CPF, ano-calendario, total pago em plano de saude (mensalidade + coparticipacao), discriminado por mes
-- CNPJ da operadora Hapvida no cabecalho
+```text
+contracheques
+├── id (uuid PK)
+├── cpf (text)
+├── mes (int)
+├── ano (int)
+├── arquivo_path (text) -- caminho no storage
+├── nome_arquivo (text)
+└── created_at (timestamptz)
 
-### 5. Gestao de senhas (area admin)
+epis
+├── id (uuid PK)
+├── cpf (text)
+├── tipo_epi (text) -- ex: capacete, luva, bota
+├── data_entrega (date)
+├── data_validade (date, nullable)
+├── quantidade (int)
+├── observacao (text, nullable)
+└── created_at (timestamptz)
 
-- Na pagina principal (Index), adicionar um botao/dialog para cadastrar senha por CPF
-- Lista de CPFs dos titulares/dependentes com opcao de definir senha
+vale_transporte
+├── id (uuid PK)
+├── cpf (text)
+├── mes (int)
+├── ano (int)
+├── valor (numeric)
+├── quantidade_passagens (int, nullable)
+├── observacao (text, nullable)
+└── created_at (timestamptz)
 
-## Arquivos a criar/modificar
+faltas
+├── id (uuid PK)
+├── cpf (text)
+├── data_falta (date)
+├── tipo (text) -- falta, atestado, licença médica, etc.
+├── justificativa (text, nullable)
+├── abonada (boolean default false)
+└── created_at (timestamptz)
+```
 
-- Migration: tabela `beneficiario_senhas`
-- `supabase/functions/login-beneficiario/index.ts`
-- `src/pages/MinhaArea.tsx` - pagina do beneficiario (login + dashboard + IR)
-- `src/components/GerenciarSenhas.tsx` - dialog para admin cadastrar senhas
-- `src/pages/Index.tsx` - adicionar botao de gerenciar senhas
-- `src/App.tsx` - nova rota `/minha-area`
+### Storage
+- Bucket `contracheques` (privado, acesso via RLS por CPF)
 
-## Detalhes tecnicos
+### Edge Function
+- Atualizar `login-beneficiario` para retornar dados de todos os módulos (EPIs, VT, faltas, contracheques)
 
-- Senha hasheada com bcrypt na edge function
-- Login sem Supabase Auth (portal simples, sem sessao persistente - dados carregados via edge function)
-- Informe IR usa CSS `@media print` para formatacao de impressao
-- RLS: tabela `beneficiario_senhas` acessivel apenas via service role (edge function)
+### Páginas e Componentes
+
+**Admin (área autenticada `/`):**
+- Nova navegação lateral ou por abas: Plano de Saúde | Contracheques | EPIs | Vale-Transporte | Faltas
+- Cada aba com formulário de cadastro manual + upload de planilha
+- Upload de PDFs para contracheques
+
+**Funcionário (`/minha-area`):**
+- Após login, navegação por abas entre os módulos
+- Cada aba mostra os dados do CPF logado
+
+### Arquivos a criar/modificar
+
+- **Migration**: 4 novas tabelas + bucket storage + RLS
+- `src/pages/Index.tsx` — adicionar navegação entre módulos admin
+- `src/pages/MinhaArea.tsx` — adicionar abas para os novos módulos
+- `src/components/admin/AdminContracheques.tsx` — upload de PDFs
+- `src/components/admin/AdminEPIs.tsx` — cadastro e upload planilha
+- `src/components/admin/AdminValeTransporte.tsx` — cadastro e upload planilha
+- `src/components/admin/AdminFaltas.tsx` — cadastro e upload planilha
+- `src/components/portal/PortalContracheques.tsx` — visualização funcionário
+- `src/components/portal/PortalEPIs.tsx` — visualização funcionário
+- `src/components/portal/PortalValeTransporte.tsx` — visualização funcionário
+- `src/components/portal/PortalFaltas.tsx` — visualização funcionário
+- `supabase/functions/login-beneficiario/index.ts` — incluir novos dados na resposta
+
+### RLS
+- Todas as tabelas: admin (authenticated) tem acesso total
+- Acesso do funcionário via edge function (service role), não direto
 
