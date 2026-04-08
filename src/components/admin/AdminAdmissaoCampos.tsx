@@ -67,6 +67,20 @@ export function AdminAdmissaoCampos() {
     toast({ title: "Campo removido" });
   };
 
+  const handleMove = async (campo: any, direction: "up" | "down") => {
+    if (!campos) return;
+    const grupoCampos = campos.filter((c) => c.grupo === campo.grupo).sort((a, b) => a.ordem - b.ordem);
+    const idx = grupoCampos.findIndex((c) => c.id === campo.id);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= grupoCampos.length) return;
+    const other = grupoCampos[swapIdx];
+    await Promise.all([
+      supabase.from("admissao_campos").update({ ordem: other.ordem }).eq("id", campo.id),
+      supabase.from("admissao_campos").update({ ordem: campo.ordem }).eq("id", other.id),
+    ]);
+    queryClient.invalidateQueries({ queryKey: ["admissao-campos"] });
+  };
+
   const openAdd = () => {
     setEditingId(null);
     setForm(EMPTY_CAMPO);
