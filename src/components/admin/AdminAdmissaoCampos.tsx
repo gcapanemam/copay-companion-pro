@@ -251,6 +251,12 @@ export function AdminAdmissaoCampos() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => handleMove(campo, "up")} title="Mover para cima">
+                                <ArrowUp className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleMove(campo, "down")} title="Mover para baixo">
+                                <ArrowDown className="h-4 w-4" />
+                              </Button>
                               <Button variant="ghost" size="icon" onClick={() => openEdit(campo)}>
                                 <Pencil className="h-4 w-4" />
                               </Button>
