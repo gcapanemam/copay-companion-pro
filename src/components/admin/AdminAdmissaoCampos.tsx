@@ -301,7 +301,17 @@ export function AdminAdmissaoCampos() {
 
       {/* Admissões recebidas */}
       <Card>
-        <CardHeader><CardTitle>Admissões Recebidas</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Admissões Recebidas</CardTitle>
+          <div>
+            <Label htmlFor="admissao-upload" className="cursor-pointer">
+              <div className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium h-10 px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground">
+                <Upload className="h-4 w-4" />Importar Planilha
+              </div>
+            </Label>
+            <Input id="admissao-upload" type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleUploadAdmissao} />
+          </div>
+        </CardHeader>
         <CardContent>
           {loadingAdmissoes ? (
             <Loader2 className="h-6 w-6 animate-spin mx-auto" />
