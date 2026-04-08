@@ -14,6 +14,135 @@ export type Database = {
   }
   public: {
     Tables: {
+      admissoes: {
+        Row: {
+          bairro: string | null
+          cep: string | null
+          cor: string | null
+          cpf: string
+          cpf_conjuge: string | null
+          cpf_dependentes: string | null
+          created_at: string
+          dados_bancarios: string | null
+          data_cadastro_pis: string | null
+          data_expedicao_rg: string | null
+          data_nascimento: string | null
+          dependentes_ir: string | null
+          detalhes_vale_transporte: string | null
+          email: string | null
+          emissao_ctps: string | null
+          endereco: string | null
+          escolaridade: string | null
+          estado_civil: string | null
+          funcao: string | null
+          horario_trabalho: string | null
+          id: string
+          interesse_plano: string | null
+          local_nascimento: string | null
+          nome_completo: string
+          nome_conjuge: string | null
+          nome_mae: string | null
+          nome_pai: string | null
+          numero_ctps: string | null
+          numero_pis: string | null
+          observacoes: string | null
+          plano_escolhido: string | null
+          primeiro_dia_trabalho: string | null
+          primeiro_emprego: boolean | null
+          rg: string | null
+          serie_ctps: string | null
+          sexo: string | null
+          telefone: string | null
+          titulo_eleitor: string | null
+          unidade: string | null
+          vale_transporte: boolean | null
+        }
+        Insert: {
+          bairro?: string | null
+          cep?: string | null
+          cor?: string | null
+          cpf: string
+          cpf_conjuge?: string | null
+          cpf_dependentes?: string | null
+          created_at?: string
+          dados_bancarios?: string | null
+          data_cadastro_pis?: string | null
+          data_expedicao_rg?: string | null
+          data_nascimento?: string | null
+          dependentes_ir?: string | null
+          detalhes_vale_transporte?: string | null
+          email?: string | null
+          emissao_ctps?: string | null
+          endereco?: string | null
+          escolaridade?: string | null
+          estado_civil?: string | null
+          funcao?: string | null
+          horario_trabalho?: string | null
+          id?: string
+          interesse_plano?: string | null
+          local_nascimento?: string | null
+          nome_completo: string
+          nome_conjuge?: string | null
+          nome_mae?: string | null
+          nome_pai?: string | null
+          numero_ctps?: string | null
+          numero_pis?: string | null
+          observacoes?: string | null
+          plano_escolhido?: string | null
+          primeiro_dia_trabalho?: string | null
+          primeiro_emprego?: boolean | null
+          rg?: string | null
+          serie_ctps?: string | null
+          sexo?: string | null
+          telefone?: string | null
+          titulo_eleitor?: string | null
+          unidade?: string | null
+          vale_transporte?: boolean | null
+        }
+        Update: {
+          bairro?: string | null
+          cep?: string | null
+          cor?: string | null
+          cpf?: string
+          cpf_conjuge?: string | null
+          cpf_dependentes?: string | null
+          created_at?: string
+          dados_bancarios?: string | null
+          data_cadastro_pis?: string | null
+          data_expedicao_rg?: string | null
+          data_nascimento?: string | null
+          dependentes_ir?: string | null
+          detalhes_vale_transporte?: string | null
+          email?: string | null
+          emissao_ctps?: string | null
+          endereco?: string | null
+          escolaridade?: string | null
+          estado_civil?: string | null
+          funcao?: string | null
+          horario_trabalho?: string | null
+          id?: string
+          interesse_plano?: string | null
+          local_nascimento?: string | null
+          nome_completo?: string
+          nome_conjuge?: string | null
+          nome_mae?: string | null
+          nome_pai?: string | null
+          numero_ctps?: string | null
+          numero_pis?: string | null
+          observacoes?: string | null
+          plano_escolhido?: string | null
+          primeiro_dia_trabalho?: string | null
+          primeiro_emprego?: boolean | null
+          rg?: string | null
+          serie_ctps?: string | null
+          sexo?: string | null
+          telefone?: string | null
+          titulo_eleitor?: string | null
+          unidade?: string | null
+          vale_transporte?: boolean | null
+        }
+        Relationships: []
+      }
       beneficiario_senhas: {
         Row: {
           cpf: string
