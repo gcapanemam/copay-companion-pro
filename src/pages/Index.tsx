@@ -2,7 +2,7 @@ import { useState } from "react";
 import { UploadArea } from "@/components/UploadArea";
 import { TabelaAnual } from "@/components/TabelaAnual";
 import { SeletorAno } from "@/components/SeletorAno";
-import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX, ClipboardList } from "lucide-react";
+import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX, ClipboardList, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +17,7 @@ import { AdminEPIs } from "@/components/admin/AdminEPIs";
 import { AdminValeTransporte } from "@/components/admin/AdminValeTransporte";
 import { AdminFaltas } from "@/components/admin/AdminFaltas";
 import { AdminAdmissaoCampos } from "@/components/admin/AdminAdmissaoCampos";
+import { AdminFuncionarios } from "@/components/admin/AdminFuncionarios";
 
 const Index = () => {
   const [ano, setAno] = useState(2025);
@@ -64,9 +65,12 @@ const Index = () => {
 
       <main className="container mx-auto px-4 py-6">
         <Tabs defaultValue="plano" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="plano" className="flex items-center gap-1">
               <Heart className="h-4 w-4" />Plano
+            </TabsTrigger>
+            <TabsTrigger value="funcionarios" className="flex items-center gap-1">
+              <Users className="h-4 w-4" />Funcionários
             </TabsTrigger>
             <TabsTrigger value="contracheques" className="flex items-center gap-1">
               <FileText className="h-4 w-4" />Contracheques
@@ -112,6 +116,10 @@ const Index = () => {
             </div>
             <UploadArea onUploadComplete={() => setRefreshKey((k) => k + 1)} />
             <TabelaAnual ano={ano} refreshKey={refreshKey} />
+          </TabsContent>
+
+          <TabsContent value="funcionarios">
+            <AdminFuncionarios />
           </TabsContent>
 
           <TabsContent value="contracheques">
