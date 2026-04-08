@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Trash2, Upload, Pencil } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload, Pencil, ArrowUp, ArrowDown } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import * as XLSX from "xlsx";
@@ -65,6 +65,20 @@ export function AdminAdmissaoCampos() {
     await supabase.from("admissao_campos").delete().eq("id", id);
     queryClient.invalidateQueries({ queryKey: ["admissao-campos"] });
     toast({ title: "Campo removido" });
+  };
+
+  const handleMove = async (campo: any, direction: "up" | "down") => {
+    if (!campos) return;
+    const grupoCampos = campos.filter((c) => c.grupo === campo.grupo).sort((a, b) => a.ordem - b.ordem);
+    const idx = grupoCampos.findIndex((c) => c.id === campo.id);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= grupoCampos.length) return;
+    const other = grupoCampos[swapIdx];
+    await Promise.all([
+      supabase.from("admissao_campos").update({ ordem: other.ordem }).eq("id", campo.id),
+      supabase.from("admissao_campos").update({ ordem: campo.ordem }).eq("id", other.id),
+    ]);
+    queryClient.invalidateQueries({ queryKey: ["admissao-campos"] });
   };
 
   const openAdd = () => {
@@ -237,6 +251,12 @@ export function AdminAdmissaoCampos() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => handleMove(campo, "up")} title="Mover para cima">
+                                <ArrowUp className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleMove(campo, "down")} title="Mover para baixo">
+                                <ArrowDown className="h-4 w-4" />
+                              </Button>
                               <Button variant="ghost" size="icon" onClick={() => openEdit(campo)}>
                                 <Pencil className="h-4 w-4" />
                               </Button>
