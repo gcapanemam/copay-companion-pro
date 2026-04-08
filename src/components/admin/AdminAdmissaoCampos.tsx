@@ -69,11 +69,11 @@ export function AdminAdmissaoCampos() {
 
   const handleMove = async (campo: any, direction: "up" | "down") => {
     if (!campos) return;
-    const grupoCampos = campos.filter((c) => c.grupo === campo.grupo).sort((a, b) => a.ordem - b.ordem);
-    const idx = grupoCampos.findIndex((c) => c.id === campo.id);
+    const sorted = [...campos].sort((a, b) => a.ordem - b.ordem);
+    const idx = sorted.findIndex((c) => c.id === campo.id);
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= grupoCampos.length) return;
-    const other = grupoCampos[swapIdx];
+    if (swapIdx < 0 || swapIdx >= sorted.length) return;
+    const other = sorted[swapIdx];
     await Promise.all([
       supabase.from("admissao_campos").update({ ordem: other.ordem }).eq("id", campo.id),
       supabase.from("admissao_campos").update({ ordem: campo.ordem }).eq("id", other.id),
