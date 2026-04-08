@@ -2,7 +2,7 @@ import { useState } from "react";
 import { UploadArea } from "@/components/UploadArea";
 import { TabelaAnual } from "@/components/TabelaAnual";
 import { SeletorAno } from "@/components/SeletorAno";
-import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX } from "lucide-react";
+import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
