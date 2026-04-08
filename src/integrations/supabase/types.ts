@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      admissao_campos: {
+        Row: {
+          ativo: boolean
+          campo_nome: string
+          created_at: string
+          grupo: string
+          id: string
+          label: string
+          obrigatorio: boolean
+          opcoes: string[] | null
+          ordem: number
+          placeholder: string | null
+          tipo: string
+        }
+        Insert: {
+          ativo?: boolean
+          campo_nome: string
+          created_at?: string
+          grupo?: string
+          id?: string
+          label: string
+          obrigatorio?: boolean
+          opcoes?: string[] | null
+          ordem?: number
+          placeholder?: string | null
+          tipo?: string
+        }
+        Update: {
+          ativo?: boolean
+          campo_nome?: string
+          created_at?: string
+          grupo?: string
+          id?: string
+          label?: string
+          obrigatorio?: boolean
+          opcoes?: string[] | null
+          ordem?: number
+          placeholder?: string | null
+          tipo?: string
+        }
+        Relationships: []
+      }
       admissoes: {
         Row: {
           bairro: string | null
@@ -23,6 +65,7 @@ export type Database = {
           cpf_conjuge: string | null
           cpf_dependentes: string | null
           created_at: string
+          dados: Json | null
           dados_bancarios: string | null
           data_cadastro_pis: string | null
           data_expedicao_rg: string | null
@@ -65,6 +108,7 @@ export type Database = {
           cpf_conjuge?: string | null
           cpf_dependentes?: string | null
           created_at?: string
+          dados?: Json | null
           dados_bancarios?: string | null
           data_cadastro_pis?: string | null
           data_expedicao_rg?: string | null
@@ -107,6 +151,7 @@ export type Database = {
           cpf_conjuge?: string | null
           cpf_dependentes?: string | null
           created_at?: string
+          dados?: Json | null
           dados_bancarios?: string | null
           data_cadastro_pis?: string | null
           data_expedicao_rg?: string | null
