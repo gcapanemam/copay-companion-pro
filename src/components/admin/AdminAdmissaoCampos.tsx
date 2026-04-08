@@ -8,10 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload, Pencil } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import * as XLSX from "xlsx";
 
 const TIPOS = [
@@ -25,13 +24,14 @@ const TIPOS = [
   { value: "boolean", label: "Sim/Não" },
 ];
 
+const EMPTY_CAMPO = { campo_nome: "", label: "", tipo: "text", opcoes: "", obrigatorio: false, grupo: "Geral", placeholder: "" };
+
 export function AdminAdmissaoCampos() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [novoCampo, setNovoCampo] = useState({
-    campo_nome: "", label: "", tipo: "text", opcoes: "", obrigatorio: false, grupo: "Geral", placeholder: "",
-  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(EMPTY_CAMPO);
 
   const { data: campos, isLoading } = useQuery({
     queryKey: ["admissao-campos"],
@@ -67,73 +67,79 @@ export function AdminAdmissaoCampos() {
     toast({ title: "Campo removido" });
   };
 
-  const handleAdd = async () => {
-    if (!novoCampo.campo_nome || !novoCampo.label) {
+  const openAdd = () => {
+    setEditingId(null);
+    setForm(EMPTY_CAMPO);
+    setDialogOpen(true);
+  };
+
+  const openEdit = (campo: any) => {
+    setEditingId(campo.id);
+    setForm({
+      campo_nome: campo.campo_nome,
+      label: campo.label,
+      tipo: campo.tipo,
+      opcoes: (campo.opcoes || []).join(", "),
+      obrigatorio: campo.obrigatorio,
+      grupo: campo.grupo,
+      placeholder: campo.placeholder || "",
+    });
+    setDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.campo_nome || !form.label) {
       toast({ title: "Preencha nome e label", variant: "destructive" });
       return;
     }
-    const slug = novoCampo.campo_nome.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-    const maxOrdem = campos?.reduce((max, c) => Math.max(max, c.ordem), 0) || 0;
-    const opcoes = novoCampo.opcoes ? novoCampo.opcoes.split(",").map((o) => o.trim()).filter(Boolean) : [];
+    const slug = form.campo_nome.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    const opcoes = form.opcoes ? form.opcoes.split(",").map((o) => o.trim()).filter(Boolean) : [];
 
-    const { error } = await supabase.from("admissao_campos").insert({
-      campo_nome: slug,
-      label: novoCampo.label,
-      tipo: novoCampo.tipo,
-      opcoes,
-      obrigatorio: novoCampo.obrigatorio,
-      grupo: novoCampo.grupo,
-      placeholder: novoCampo.placeholder,
-      ordem: maxOrdem + 1,
-    });
-    if (error) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
-      return;
+    if (editingId) {
+      const { error } = await supabase.from("admissao_campos").update({
+        campo_nome: slug,
+        label: form.label,
+        tipo: form.tipo,
+        opcoes,
+        obrigatorio: form.obrigatorio,
+        grupo: form.grupo,
+        placeholder: form.placeholder || null,
+      }).eq("id", editingId);
+      if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
+      toast({ title: "Campo atualizado" });
+    } else {
+      const maxOrdem = campos?.reduce((max, c) => Math.max(max, c.ordem), 0) || 0;
+      const { error } = await supabase.from("admissao_campos").insert({
+        campo_nome: slug, label: form.label, tipo: form.tipo, opcoes, obrigatorio: form.obrigatorio, grupo: form.grupo, placeholder: form.placeholder || null, ordem: maxOrdem + 1,
+      });
+      if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
+      toast({ title: "Campo adicionado" });
     }
+
     setDialogOpen(false);
-    setNovoCampo({ campo_nome: "", label: "", tipo: "text", opcoes: "", obrigatorio: false, grupo: "Geral", placeholder: "" });
-    queryClient.invalidateQueries({ queryKey: ["admissao-campos"] });
-    toast({ title: "Campo adicionado" });
-  };
-
-  const updateLabel = async (id: string, label: string) => {
-    await supabase.from("admissao_campos").update({ label }).eq("id", id);
+    setForm(EMPTY_CAMPO);
+    setEditingId(null);
     queryClient.invalidateQueries({ queryKey: ["admissao-campos"] });
   };
 
+  // --- Import logic ---
   const COLUMN_MAP: Record<string, string> = {
-    "Unidade": "unidade",
-    "Nome Completo": "nome_completo",
-    "Data de Nascimento": "data_nascimento",
-    "CPF (somente números, sem traço nem pontos)": "cpf",
-    "RG": "rg",
-    "DATA EXPEDIÇÃO RG": "data_expedicao_rg",
-    "Títutlo de Eleitor": "titulo_eleitor",
-    "Número do PIS (somente números, sem traço nem pontos)": "numero_pis",
-    "DATA CADASTRO PIS": "data_cadastro_pis",
-    "Número da Carteira de Trabalho": "numero_ctps",
-    "Série da Carteira de Trabalho": "serie_ctps",
-    "Emissão da Carteira de Trabalho": "emissao_ctps",
-    "Estado Civil": "estado_civil",
-    "Grau de Escolaridade": "escolaridade",
-    "Endereço Completo (rua, número)": "endereco",
-    "Bairro": "bairro",
-    "CEP": "cep",
-    "Nome da Mãe": "nome_mae",
-    "Nome do Pai": "nome_pai",
-    "Local de Nascimento (Cidade)": "local_nascimento",
-    "Sexo": "sexo",
-    "Primeiro Emprego?": "primeiro_emprego",
-    "Irá precisar de vale transporte?": "vale_transporte",
+    "Unidade": "unidade", "Nome Completo": "nome_completo", "Data de Nascimento": "data_nascimento",
+    "CPF (somente números, sem traço nem pontos)": "cpf", "RG": "rg", "DATA EXPEDIÇÃO RG": "data_expedicao_rg",
+    "Títutlo de Eleitor": "titulo_eleitor", "Número do PIS (somente números, sem traço nem pontos)": "numero_pis",
+    "DATA CADASTRO PIS": "data_cadastro_pis", "Número da Carteira de Trabalho": "numero_ctps",
+    "Série da Carteira de Trabalho": "serie_ctps", "Emissão da Carteira de Trabalho": "emissao_ctps",
+    "Estado Civil": "estado_civil", "Grau de Escolaridade": "escolaridade",
+    "Endereço Completo (rua, número)": "endereco", "Bairro": "bairro", "CEP": "cep",
+    "Nome da Mãe": "nome_mae", "Nome do Pai": "nome_pai", "Local de Nascimento (Cidade)": "local_nascimento",
+    "Sexo": "sexo", "Primeiro Emprego?": "primeiro_emprego", "Irá precisar de vale transporte?": "vale_transporte",
     "Horário de Trabalho": "horario_trabalho",
     "Se marcou Sim para Vale transporte, especificar ônibus e valores por dia.": "detalhes_vale_transporte",
     "Telefone": "telefone",
     "Conta do Banco ITAÚ (Agência e Conta) - Caso não tenha conta no Banco Itaú, favor realizar a abertura de conta através do aplicativo do Itaú. Ela poderá ser uma conta salário e fazer a portabilidade para sua conta atual. Caso não tenha conta bo Banco Itaú, favor informar seu PIX.": "dados_bancarios",
-    "E-mail pessoal": "email",
-    "Cor": "cor",
+    "E-mail pessoal": "email", "Cor": "cor",
     "CPF dos dependentes de você (no Imposto de Renda) caso sejam maiores de 14 anos": "cpf_dependentes",
-    "Nome Completo do Conjuge (se aplicável)": "nome_conjuge",
-    "CPF do Conjuge (se aplicável)": "cpf_conjuge",
+    "Nome Completo do Conjuge (se aplicável)": "nome_conjuge", "CPF do Conjuge (se aplicável)": "cpf_conjuge",
     "Função que exercerá na empresa:": "funcao",
     "Filhos ou Cônjuge são dependentes na Declaração de IR? Se sim, detalhar quais são.": "dependentes_ir",
     "Qual primeiro dia de trabalho aqui na escola?": "primeiro_dia_trabalho",
@@ -148,13 +154,10 @@ export function AdminAdmissaoCampos() {
     const wb = XLSX.read(data);
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows: any[] = XLSX.utils.sheet_to_json(ws);
-
     let count = 0;
     for (const row of rows) {
       const dados: Record<string, any> = {};
-      let nomeCompleto = "";
-      let cpfVal = "";
-
+      let nomeCompleto = "", cpfVal = "";
       for (const [header, value] of Object.entries(row)) {
         if (header === "Carimbo de data/hora") continue;
         const fieldName = COLUMN_MAP[header];
@@ -162,29 +165,18 @@ export function AdminAdmissaoCampos() {
           const strVal = String(value || "");
           if (fieldName === "nome_completo") nomeCompleto = strVal;
           if (fieldName === "cpf") cpfVal = strVal.replace(/\D/g, "");
-          if (fieldName === "primeiro_emprego") {
+          if (fieldName === "primeiro_emprego" || fieldName === "vale_transporte") {
             dados[fieldName] = strVal.toLowerCase().includes("sim");
-          } else if (fieldName === "vale_transporte") {
-            dados[fieldName] = strVal.toLowerCase().includes("sim");
-          } else {
-            dados[fieldName] = strVal;
-          }
+          } else { dados[fieldName] = strVal; }
         } else {
           const slug = header.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60);
           if (slug) dados[slug] = String(value || "");
         }
       }
-
       if (!nomeCompleto || !cpfVal) continue;
-
-      await supabase.from("admissoes").insert({
-        nome_completo: nomeCompleto,
-        cpf: cpfVal,
-        dados,
-      });
+      await supabase.from("admissoes").insert({ nome_completo: nomeCompleto, cpf: cpfVal, dados });
       count++;
     }
-
     toast({ title: `${count} admissões importadas!` });
     queryClient.invalidateQueries({ queryKey: ["admin-admissoes"] });
     e.target.value = "";
@@ -203,56 +195,10 @@ export function AdminAdmissaoCampos() {
 
   return (
     <div className="space-y-6">
-      {/* Config dos campos */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Campos do Formulário de Admissão</CardTitle>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm"><Plus className="h-4 w-4 mr-1" />Novo Campo</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Adicionar Campo</DialogTitle></DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Nome interno (sem espaços/acentos)</Label>
-                  <Input value={novoCampo.campo_nome} onChange={(e) => setNovoCampo(p => ({ ...p, campo_nome: e.target.value }))} placeholder="ex: numero_registro" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Label (exibido no formulário)</Label>
-                  <Input value={novoCampo.label} onChange={(e) => setNovoCampo(p => ({ ...p, label: e.target.value }))} placeholder="ex: Número de Registro" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Tipo</Label>
-                  <Select value={novoCampo.tipo} onValueChange={(v) => setNovoCampo(p => ({ ...p, tipo: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TIPOS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {novoCampo.tipo === "select" && (
-                  <div className="space-y-2">
-                    <Label>Opções (separadas por vírgula)</Label>
-                    <Input value={novoCampo.opcoes} onChange={(e) => setNovoCampo(p => ({ ...p, opcoes: e.target.value }))} placeholder="Opção 1, Opção 2, Opção 3" />
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <Label>Grupo/Seção</Label>
-                  <Input value={novoCampo.grupo} onChange={(e) => setNovoCampo(p => ({ ...p, grupo: e.target.value }))} placeholder="ex: Dados Pessoais" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Placeholder</Label>
-                  <Input value={novoCampo.placeholder} onChange={(e) => setNovoCampo(p => ({ ...p, placeholder: e.target.value }))} />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch checked={novoCampo.obrigatorio} onCheckedChange={(v) => setNovoCampo(p => ({ ...p, obrigatorio: v }))} />
-                  <Label>Obrigatório</Label>
-                </div>
-                <Button onClick={handleAdd} className="w-full">Adicionar</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Novo Campo</Button>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -266,8 +212,10 @@ export function AdminAdmissaoCampos() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Label</TableHead>
+                        <TableHead>Nome</TableHead>
                         <TableHead>Tipo</TableHead>
-                        <TableHead className="text-center">Obrigatório</TableHead>
+                        <TableHead>Opções</TableHead>
+                        <TableHead className="text-center">Obrig.</TableHead>
                         <TableHead className="text-center">Ativo</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
@@ -276,7 +224,11 @@ export function AdminAdmissaoCampos() {
                       {(campos || []).filter((c) => c.grupo === grupo).map((campo) => (
                         <TableRow key={campo.id}>
                           <TableCell className="font-medium">{campo.label}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{campo.campo_nome}</TableCell>
                           <TableCell>{TIPOS.find((t) => t.value === campo.tipo)?.label || campo.tipo}</TableCell>
+                          <TableCell className="text-xs max-w-[150px] truncate">
+                            {campo.tipo === "select" ? (campo.opcoes || []).join(", ") || "-" : "-"}
+                          </TableCell>
                           <TableCell className="text-center">
                             <Switch checked={campo.obrigatorio} onCheckedChange={() => toggleObrigatorio(campo.id, campo.obrigatorio)} />
                           </TableCell>
@@ -284,9 +236,14 @@ export function AdminAdmissaoCampos() {
                             <Switch checked={campo.ativo} onCheckedChange={() => toggleAtivo(campo.id, campo.ativo)} />
                           </TableCell>
                           <TableCell>
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(campo.id)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => openEdit(campo)}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDelete(campo.id)}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -298,6 +255,51 @@ export function AdminAdmissaoCampos() {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog para adicionar/editar campo */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { setDialogOpen(false); setEditingId(null); setForm(EMPTY_CAMPO); } else setDialogOpen(true); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editingId ? "Editar Campo" : "Adicionar Campo"}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome interno (sem espaços/acentos)</Label>
+              <Input value={form.campo_nome} onChange={(e) => setForm(p => ({ ...p, campo_nome: e.target.value }))} placeholder="ex: numero_registro" />
+            </div>
+            <div className="space-y-2">
+              <Label>Label (exibido no formulário)</Label>
+              <Input value={form.label} onChange={(e) => setForm(p => ({ ...p, label: e.target.value }))} placeholder="ex: Número de Registro" />
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo</Label>
+              <Select value={form.tipo} onValueChange={(v) => setForm(p => ({ ...p, tipo: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TIPOS.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {form.tipo === "select" && (
+              <div className="space-y-2">
+                <Label>Opções (separadas por vírgula)</Label>
+                <Input value={form.opcoes} onChange={(e) => setForm(p => ({ ...p, opcoes: e.target.value }))} placeholder="Opção 1, Opção 2, Opção 3" />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Grupo/Seção</Label>
+              <Input value={form.grupo} onChange={(e) => setForm(p => ({ ...p, grupo: e.target.value }))} placeholder="ex: Dados Pessoais" />
+            </div>
+            <div className="space-y-2">
+              <Label>Placeholder</Label>
+              <Input value={form.placeholder} onChange={(e) => setForm(p => ({ ...p, placeholder: e.target.value }))} />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={form.obrigatorio} onCheckedChange={(v) => setForm(p => ({ ...p, obrigatorio: v }))} />
+              <Label>Obrigatório</Label>
+            </div>
+            <Button onClick={handleSave} className="w-full">{editingId ? "Salvar Alterações" : "Adicionar"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Admissões recebidas */}
       <Card>
