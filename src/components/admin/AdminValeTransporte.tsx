@@ -36,9 +36,8 @@ export function AdminValeTransporte() {
   const { data: beneficiarios } = useQuery({
     queryKey: ["beneficiarios-list"],
     queryFn: async () => {
-      const { data: t } = await supabase.from("titulares").select("nome, cpf").not("cpf", "is", null);
-      const { data: d } = await supabase.from("dependentes").select("nome, cpf").not("cpf", "is", null);
-      return [...(t || []), ...(d || [])].sort((a, b) => a.nome.localeCompare(b.nome));
+      const { data: t } = await supabase.from("titulares").select("nome, cpf").not("cpf", "is", null).order("nome");
+      return t || [];
     },
   });
 
