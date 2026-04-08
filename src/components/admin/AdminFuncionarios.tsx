@@ -1,16 +1,51 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Loader2, Search, Users, Camera, User, FileText, MapPin, Heart, Briefcase, Phone, Stethoscope } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "sonner";
+
+function getInitials(name: string) {
+  return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+}
+
+function FichaSection({ icon: Icon, title, children }: { icon: any; title: string; children: React.ReactNode }) {
+  return (
+    <div className="border rounded-lg p-4 space-y-2">
+      <div className="flex items-center gap-2 mb-2">
+        <Icon className="h-4 w-4 text-primary" />
+        <h3 className="font-semibold text-sm text-muted-foreground">{title}</h3>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function FichaField({ label, value }: { label: string; value: any }) {
+  if (!value && value !== false) return null;
+  const display = typeof value === "boolean" ? (value ? "Sim" : "Não") : String(value);
+  return (
+    <div className="py-0.5">
+      <span className="font-medium text-muted-foreground">{label}:</span>{" "}
+      <span>{display}</span>
+    </div>
+  );
+}
 
 export function AdminFuncionarios() {
   const [busca, setBusca] = useState("");
   const [selected, setSelected] = useState<any>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
   const { data: admissoes, isLoading: loadingAdmissoes } = useQuery({
     queryKey: ["admin-admissoes-func"],
@@ -39,17 +74,12 @@ export function AdminFuncionarios() {
     return `${n.slice(0, 3)}.${n.slice(3, 6)}.${n.slice(6, 9)}-${n.slice(9)}`;
   };
 
-  // Merge: titulares do plano + admissões, sem duplicar por CPF
   const funcionarios = (() => {
     const map = new Map<string, any>();
-
     (titulares || []).forEach((t) => {
       const cpf = t.cpf?.replace(/\D/g, "") || "";
-      if (cpf) {
-        map.set(cpf, { nome: t.nome, cpf, origem: "Plano de Saúde", dados: {} });
-      }
+      if (cpf) map.set(cpf, { nome: t.nome, cpf, origem: "Plano de Saúde", dados: {} });
     });
-
     (admissoes || []).forEach((a) => {
       const dados = (a.dados || {}) as Record<string, any>;
       const cpf = (dados.cpf || a.cpf || "").replace(/\D/g, "");
@@ -64,7 +94,6 @@ export function AdminFuncionarios() {
         map.set(cpf, { nome, cpf, origem: "Admissão", dados, admissao: a });
       }
     });
-
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   })();
 
@@ -73,43 +102,38 @@ export function AdminFuncionarios() {
     return f.nome.toLowerCase().includes(term) || f.cpf.includes(busca.replace(/\D/g, ""));
   });
 
-  const LABELS: Record<string, string> = {
-    unidade: "Unidade",
-    data_nascimento: "Data de Nascimento",
-    rg: "RG",
-    data_expedicao_rg: "Expedição RG",
-    titulo_eleitor: "Título de Eleitor",
-    numero_pis: "Nº PIS",
-    data_cadastro_pis: "Cadastro PIS",
-    numero_ctps: "Nº CTPS",
-    serie_ctps: "Série CTPS",
-    emissao_ctps: "Emissão CTPS",
-    estado_civil: "Estado Civil",
-    escolaridade: "Escolaridade",
-    endereco: "Endereço",
-    bairro: "Bairro",
-    cep: "CEP",
-    nome_mae: "Nome da Mãe",
-    nome_pai: "Nome do Pai",
-    local_nascimento: "Local de Nascimento",
-    sexo: "Sexo",
-    cor: "Cor",
-    primeiro_emprego: "Primeiro Emprego",
-    vale_transporte: "Vale Transporte",
-    detalhes_vale_transporte: "Detalhes VT",
-    horario_trabalho: "Horário de Trabalho",
-    telefone: "Telefone",
-    email: "E-mail",
-    dados_bancarios: "Dados Bancários",
-    funcao: "Função",
-    primeiro_dia_trabalho: "1º Dia de Trabalho",
-    interesse_plano: "Interesse Plano",
-    plano_escolhido: "Plano Escolhido",
-    nome_conjuge: "Cônjuge",
-    cpf_conjuge: "CPF Cônjuge",
-    cpf_dependentes: "CPF Dependentes IR",
-    dependentes_ir: "Dependentes IR",
+  const getFotoUrl = (f: any) => {
+    const fotoUrl = f.admissao?.foto_url;
+    if (!fotoUrl) return null;
+    const { data } = supabase.storage.from("funcionarios-fotos").getPublicUrl(fotoUrl);
+    return data?.publicUrl || null;
   };
+
+  const handleFotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selected) return;
+    setUploading(true);
+    try {
+      const path = `${selected.cpf}.${file.name.split(".").pop()}`;
+      const { error: upErr } = await supabase.storage.from("funcionarios-fotos").upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      if (selected.admissao?.id) {
+        await supabase.from("admissoes").update({ foto_url: path } as any).eq("id", selected.admissao.id);
+      }
+      toast.success("Foto atualizada!");
+      queryClient.invalidateQueries({ queryKey: ["admin-admissoes-func"] });
+      setSelected((prev: any) => prev ? { ...prev, admissao: { ...prev.admissao, foto_url: path } } : prev);
+    } catch (err: any) {
+      toast.error("Erro ao enviar foto: " + err.message);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const d = selected?.dados || {};
+  const a = selected?.admissao || {};
+  const g = (key: string) => d[key] || a[key] || "";
 
   return (
     <div className="space-y-6">
@@ -121,12 +145,7 @@ export function AdminFuncionarios() {
           </div>
           <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome ou CPF..."
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="pl-9"
-            />
+            <Input placeholder="Buscar por nome ou CPF..." value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-9" />
           </div>
         </CardHeader>
         <CardContent>
@@ -139,6 +158,7 @@ export function AdminFuncionarios() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12"></TableHead>
                     <TableHead>Nome</TableHead>
                     <TableHead>CPF</TableHead>
                     <TableHead>Função</TableHead>
@@ -147,21 +167,26 @@ export function AdminFuncionarios() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((f) => (
-                    <TableRow
-                      key={f.cpf}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => setSelected(f)}
-                    >
-                      <TableCell className="font-medium">{f.nome}</TableCell>
-                      <TableCell>{formatCpf(f.cpf)}</TableCell>
-                      <TableCell>{f.dados?.funcao || f.admissao?.funcao || "-"}</TableCell>
-                      <TableCell>{f.dados?.unidade || f.admissao?.unidade || "-"}</TableCell>
-                      <TableCell>
-                        <Badge variant={f.origem === "Ambos" ? "default" : "secondary"}>{f.origem}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filtered.map((f) => {
+                    const foto = getFotoUrl(f);
+                    return (
+                      <TableRow key={f.cpf} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelected(f)}>
+                        <TableCell>
+                          <Avatar className="h-8 w-8">
+                            {foto && <AvatarImage src={foto} />}
+                            <AvatarFallback className="text-xs">{getInitials(f.nome)}</AvatarFallback>
+                          </Avatar>
+                        </TableCell>
+                        <TableCell className="font-medium">{f.nome}</TableCell>
+                        <TableCell>{formatCpf(f.cpf)}</TableCell>
+                        <TableCell>{f.dados?.funcao || f.admissao?.funcao || "-"}</TableCell>
+                        <TableCell>{f.dados?.unidade || f.admissao?.unidade || "-"}</TableCell>
+                        <TableCell>
+                          <Badge variant={f.origem === "Ambos" ? "default" : "secondary"}>{f.origem}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -170,33 +195,90 @@ export function AdminFuncionarios() {
       </Card>
 
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-auto">
           <DialogHeader>
-            <DialogTitle>{selected?.nome}</DialogTitle>
+            <DialogTitle>Ficha Funcional</DialogTitle>
           </DialogHeader>
           {selected && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div><span className="font-semibold">CPF:</span> {formatCpf(selected.cpf)}</div>
-                <div><span className="font-semibold">Origem:</span> {selected.origem}</div>
-              </div>
-              {Object.keys(selected.dados || {}).length > 0 && (
-                <div className="border rounded-lg p-4 space-y-2">
-                  <h3 className="font-semibold text-sm text-muted-foreground mb-2">Dados Cadastrais</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                    {Object.entries(selected.dados).map(([key, val]) => {
-                      if (key === "nome_completo" || key === "cpf" || !val) return null;
-                      const label = LABELS[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
-                      const display = typeof val === "boolean" ? (val ? "Sim" : "Não") : String(val);
-                      return (
-                        <div key={key}>
-                          <span className="font-semibold">{label}:</span> {display}
-                        </div>
-                      );
-                    })}
-                  </div>
+            <div className="space-y-4">
+              {/* Header com foto */}
+              <div className="flex gap-5 items-start border rounded-lg p-4 bg-muted/30">
+                <div className="relative group shrink-0">
+                  <Avatar className="h-28 w-28">
+                    {getFotoUrl(selected) && <AvatarImage src={getFotoUrl(selected)!} />}
+                    <AvatarFallback className="text-2xl">{getInitials(selected.nome)}</AvatarFallback>
+                  </Avatar>
+                  <button
+                    className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? <Loader2 className="h-5 w-5 animate-spin text-white" /> : <Camera className="h-5 w-5 text-white" />}
+                  </button>
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFotoUpload} />
                 </div>
-              )}
+                <div className="space-y-1">
+                  <h2 className="text-xl font-bold">{selected.nome}</h2>
+                  <p className="text-sm text-muted-foreground">CPF: {formatCpf(selected.cpf)}</p>
+                  {g("funcao") && <p className="text-sm">Função: {g("funcao")}</p>}
+                  {g("unidade") && <p className="text-sm">Unidade: {g("unidade")}</p>}
+                  <Badge variant={selected.origem === "Ambos" ? "default" : "secondary"}>{selected.origem}</Badge>
+                </div>
+              </div>
+
+              <FichaSection icon={User} title="Dados Pessoais">
+                <FichaField label="Data de Nascimento" value={g("data_nascimento")} />
+                <FichaField label="RG" value={g("rg")} />
+                <FichaField label="Expedição RG" value={g("data_expedicao_rg")} />
+                <FichaField label="Sexo" value={g("sexo")} />
+                <FichaField label="Cor" value={g("cor")} />
+                <FichaField label="Estado Civil" value={g("estado_civil")} />
+                <FichaField label="Escolaridade" value={g("escolaridade")} />
+                <FichaField label="Local de Nascimento" value={g("local_nascimento")} />
+              </FichaSection>
+
+              <FichaSection icon={FileText} title="Documentos">
+                <FichaField label="Nº PIS" value={g("numero_pis")} />
+                <FichaField label="Cadastro PIS" value={g("data_cadastro_pis")} />
+                <FichaField label="Nº CTPS" value={g("numero_ctps")} />
+                <FichaField label="Série CTPS" value={g("serie_ctps")} />
+                <FichaField label="Emissão CTPS" value={g("emissao_ctps")} />
+                <FichaField label="Título de Eleitor" value={g("titulo_eleitor")} />
+              </FichaSection>
+
+              <FichaSection icon={MapPin} title="Endereço">
+                <FichaField label="Endereço" value={g("endereco")} />
+                <FichaField label="Bairro" value={g("bairro")} />
+                <FichaField label="CEP" value={g("cep")} />
+              </FichaSection>
+
+              <FichaSection icon={Heart} title="Família">
+                <FichaField label="Nome da Mãe" value={g("nome_mae")} />
+                <FichaField label="Nome do Pai" value={g("nome_pai")} />
+                <FichaField label="Cônjuge" value={g("nome_conjuge")} />
+                <FichaField label="CPF Cônjuge" value={g("cpf_conjuge")} />
+                <FichaField label="Dependentes IR" value={g("dependentes_ir")} />
+                <FichaField label="CPF Dependentes" value={g("cpf_dependentes")} />
+              </FichaSection>
+
+              <FichaSection icon={Briefcase} title="Profissional">
+                <FichaField label="1º Dia de Trabalho" value={g("primeiro_dia_trabalho")} />
+                <FichaField label="Horário de Trabalho" value={g("horario_trabalho")} />
+                <FichaField label="Primeiro Emprego" value={g("primeiro_emprego")} />
+                <FichaField label="Vale Transporte" value={g("vale_transporte")} />
+                <FichaField label="Detalhes VT" value={g("detalhes_vale_transporte")} />
+                <FichaField label="Dados Bancários" value={g("dados_bancarios")} />
+              </FichaSection>
+
+              <FichaSection icon={Phone} title="Contato">
+                <FichaField label="Telefone" value={g("telefone")} />
+                <FichaField label="E-mail" value={g("email")} />
+              </FichaSection>
+
+              <FichaSection icon={Stethoscope} title="Plano de Saúde">
+                <FichaField label="Interesse" value={g("interesse_plano")} />
+                <FichaField label="Plano Escolhido" value={g("plano_escolhido")} />
+              </FichaSection>
             </div>
           )}
         </DialogContent>
