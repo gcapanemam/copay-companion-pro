@@ -77,6 +77,7 @@ export type Database = {
           endereco: string | null
           escolaridade: string | null
           estado_civil: string | null
+          foto_url: string | null
           funcao: string | null
           horario_trabalho: string | null
           id: string
@@ -120,6 +121,7 @@ export type Database = {
           endereco?: string | null
           escolaridade?: string | null
           estado_civil?: string | null
+          foto_url?: string | null
           funcao?: string | null
           horario_trabalho?: string | null
           id?: string
@@ -163,6 +165,7 @@ export type Database = {
           endereco?: string | null
           escolaridade?: string | null
           estado_civil?: string | null
+          foto_url?: string | null
           funcao?: string | null
           horario_trabalho?: string | null
           id?: string
