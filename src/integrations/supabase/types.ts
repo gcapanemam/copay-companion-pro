@@ -35,6 +35,36 @@ export type Database = {
         }
         Relationships: []
       }
+      contracheques: {
+        Row: {
+          ano: number
+          arquivo_path: string
+          cpf: string
+          created_at: string
+          id: string
+          mes: number
+          nome_arquivo: string
+        }
+        Insert: {
+          ano: number
+          arquivo_path: string
+          cpf: string
+          created_at?: string
+          id?: string
+          mes: number
+          nome_arquivo: string
+        }
+        Update: {
+          ano?: number
+          arquivo_path?: string
+          cpf?: string
+          created_at?: string
+          id?: string
+          mes?: number
+          nome_arquivo?: string
+        }
+        Relationships: []
+      }
       coparticipacao_itens: {
         Row: {
           coparticipacao_id: string
@@ -159,6 +189,69 @@ export type Database = {
           },
         ]
       }
+      epis: {
+        Row: {
+          cpf: string
+          created_at: string
+          data_entrega: string
+          data_validade: string | null
+          id: string
+          observacao: string | null
+          quantidade: number
+          tipo_epi: string
+        }
+        Insert: {
+          cpf: string
+          created_at?: string
+          data_entrega: string
+          data_validade?: string | null
+          id?: string
+          observacao?: string | null
+          quantidade?: number
+          tipo_epi: string
+        }
+        Update: {
+          cpf?: string
+          created_at?: string
+          data_entrega?: string
+          data_validade?: string | null
+          id?: string
+          observacao?: string | null
+          quantidade?: number
+          tipo_epi?: string
+        }
+        Relationships: []
+      }
+      faltas: {
+        Row: {
+          abonada: boolean
+          cpf: string
+          created_at: string
+          data_falta: string
+          id: string
+          justificativa: string | null
+          tipo: string
+        }
+        Insert: {
+          abonada?: boolean
+          cpf: string
+          created_at?: string
+          data_falta: string
+          id?: string
+          justificativa?: string | null
+          tipo?: string
+        }
+        Update: {
+          abonada?: boolean
+          cpf?: string
+          created_at?: string
+          data_falta?: string
+          id?: string
+          justificativa?: string | null
+          tipo?: string
+        }
+        Relationships: []
+      }
       mensalidades: {
         Row: {
           ano: number
@@ -249,6 +342,39 @@ export type Database = {
           id?: string
           nome_arquivo?: string
           tipo?: string
+        }
+        Relationships: []
+      }
+      vale_transporte: {
+        Row: {
+          ano: number
+          cpf: string
+          created_at: string
+          id: string
+          mes: number
+          observacao: string | null
+          quantidade_passagens: number | null
+          valor: number
+        }
+        Insert: {
+          ano: number
+          cpf: string
+          created_at?: string
+          id?: string
+          mes: number
+          observacao?: string | null
+          quantidade_passagens?: number | null
+          valor?: number
+        }
+        Update: {
+          ano?: number
+          cpf?: string
+          created_at?: string
+          id?: string
+          mes?: number
+          observacao?: string | null
+          quantidade_passagens?: number | null
+          valor?: number
         }
         Relationships: []
       }
