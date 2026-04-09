@@ -115,7 +115,6 @@ export function AdminContracheques() {
     const content = await page.getTextContent();
     const items = content.items as any[];
     
-    // Sort by Y (top to bottom) then X (left to right)
     items.sort((a: any, b: any) => {
       const yDiff = b.transform[5] - a.transform[5];
       if (Math.abs(yDiff) > 3) return yDiff;
@@ -137,17 +136,15 @@ export function AdminContracheques() {
     }
     if (lineText) lines.push(lineText.trim());
 
-    // Find employee name - it's in the line after "Código Nome do Funcionário" header
-    // or it's the line containing the employee name (usually line with code number + name)
     let nome = "";
     let mesNum = 0;
     let anoNum = 0;
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+    for (let i = 0; i < Math.min(lines.length, 15); i++) {
+      const line = lines[i].replace(/\s{2,}/g, " ").trim();
       
-      // Extract month/year from "Março de 2026" pattern
-      const mesMatch = line.match(/(\w+)\s+de\s+(\d{4})/i);
+      // Extract month/year - handles "Mensalista Março de 2026" or "Março de 2026"
+      const mesMatch = line.match(/([A-Za-zÀ-ú]+)\s+de\s+(\d{4})/i);
       if (mesMatch && !mesNum) {
         const mesNome = normalize(mesMatch[1]);
         if (MESES_MAP[mesNome]) {
@@ -156,25 +153,22 @@ export function AdminContracheques() {
         }
       }
 
-      // The employee name line typically starts with a number (code) followed by the name
-      // It appears after "Código Nome do Funcionário CBO Departamento Filial"
+      // Name line: starts with code number, then name, then CBO (6-digit), dept, filial
+      // e.g. "108 ALESSANDRA DE OLIVEIRA PATRÍCIO FONSECA GUIMARAES 334105 1 1"
       if (line.match(/^C.digo\s+Nome/i) || line.match(/Nome do Funcion/i)) {
-        // Next non-empty line should have: code + name
-        for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
-          const nextLine = lines[j].trim();
-          // Match: number followed by name (e.g., "108 ALESSANDRA DE OLIVEIRA...")
-          const nameMatch = nextLine.match(/^\d+\s+(.+)/);
-          if (nameMatch && !nome) {
-            // The name might contain the role after it, remove CBO number and what follows
-            let rawName = nameMatch[1];
-            // Remove trailing numbers (CBO, dept, filial)
-            rawName = rawName.replace(/\s+\d+\s*$/, "").replace(/\s+\d+\s+\d+\s*$/, "");
-            // Remove role if it's on the same line (e.g., "MONITOR 334105 1 1")
-            const parts = rawName.split(/\s{2,}/);
-            nome = parts[0].trim();
-            break;
+        const nextLine = (lines[i + 1] || "").replace(/\s{2,}/g, " ").trim();
+        // Match: code + name + CBO(6digits) + numbers
+        const nameMatch = nextLine.match(/^\d+\s+(.+?)\s+\d{4,6}\s+\d/);
+        if (nameMatch) {
+          nome = nameMatch[1].trim();
+        } else {
+          // Fallback: just take everything after the code, remove trailing numbers
+          const fallback = nextLine.match(/^\d+\s+(.+)/);
+          if (fallback) {
+            nome = fallback[1].replace(/\s+\d+(\s+\d+)*\s*$/, "").trim();
           }
         }
+        if (nome) break;
       }
     }
 
