@@ -34,164 +34,117 @@ interface PontoRecord {
   motivo: string | null;
 }
 
-async function extractTextFromPdf(file: File): Promise<string> {
+async function parsePontoPdf(file: File): Promise<PontoRecord[]> {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  let fullText = "";
+  const records: PontoRecord[] = [];
+
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
     const items = content.items as any[];
-    // Sort by Y desc, X asc to reconstruct lines
-    items.sort((a, b) => {
-      const yDiff = b.transform[5] - a.transform[5];
-      if (Math.abs(yDiff) > 3) return yDiff;
-      return a.transform[4] - b.transform[4];
-    });
-    let currentY = -1;
-    let line = "";
-    for (const item of items) {
-      const y = Math.round(item.transform[5]);
-      if (currentY === -1) currentY = y;
-      if (Math.abs(y - currentY) > 3) {
-        fullText += line.trim() + "\n";
-        line = "";
-        currentY = y;
+
+    // Collect all text items with positions
+    const textItems = items.map(item => ({
+      text: item.str as string,
+      x: Math.round(item.transform[4]),
+      y: Math.round(item.transform[5]),
+    })).filter(t => t.text.trim());
+
+    // Group by Y (lines) with tolerance
+    const lineMap = new Map<number, typeof textItems>();
+    for (const item of textItems) {
+      let foundY = -1;
+      for (const key of lineMap.keys()) {
+        if (Math.abs(key - item.y) <= 3) { foundY = key; break; }
       }
-      line += item.str + " ";
-    }
-    if (line.trim()) fullText += line.trim() + "\n";
-    fullText += "\n---PAGE_BREAK---\n";
-  }
-  return fullText;
-}
-
-function parseEspelhoPonto(text: string): PontoRecord[] {
-  const records: PontoRecord[] = [];
-  const pages = text.split("---PAGE_BREAK---");
-
-  let currentNome = "";
-  let currentCpf = "";
-
-  for (const page of pages) {
-    const lines = page.split("\n").map(l => l.trim()).filter(Boolean);
-
-    // Look for NOME and CPF
-    for (const line of lines) {
-      const nomeMatch = line.match(/NOME:\s*(.+?)(?:\s{2,}|PIS|$)/i);
-      if (nomeMatch) currentNome = nomeMatch[1].trim();
-
-      const cpfMatch = line.match(/CPF:\s*(\d[\d.\-/]+\d)/i);
-      if (cpfMatch) currentCpf = cpfMatch[1].replace(/\D/g, "");
+      const useY = foundY >= 0 ? foundY : item.y;
+      if (!lineMap.has(useY)) lineMap.set(useY, []);
+      lineMap.get(useY)!.push(item);
     }
 
-    if (!currentCpf) continue;
+    // Sort lines top to bottom, items left to right
+    const lines = [...lineMap.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .map(([, items]) => items.sort((a, b) => a.x - b.x));
 
-    // Parse day rows - format: "DD/MM/YY - DIA" or similar
+    // Find NOME and CPF from header
+    let nome = "";
+    let cpfVal = "";
     for (const line of lines) {
-      const dayMatch = line.match(/^(\d{2}\/\d{2}\/\d{2})\s*-\s*(SEG|TER|QUA|QUI|SEX|SAB|DOM|FER)/i);
+      const lineText = line.map(i => i.text).join(" ");
+      const nomeMatch = lineText.match(/NOME:\s*(.+?)(?:\s{2,}|PIS|$)/i);
+      if (nomeMatch) nome = nomeMatch[1].trim();
+      const cpfMatch = lineText.match(/CPF:\s*(\d[\d.\-/]+\d)/i);
+      if (cpfMatch) cpfVal = cpfMatch[1].replace(/\D/g, "");
+    }
+
+    if (!cpfVal) continue;
+
+    // Find the header row to determine column X positions
+    let colPositions: { ent1: number; sai1: number; ent2: number; sai2: number; ent3: number; sai3: number; duracao: number } | null = null;
+    for (const line of lines) {
+      const hasEnt1 = line.find(i => /ENT\.\s*1/i.test(i.text));
+      const hasSai1 = line.find(i => /SA[ÍI]\.\s*1/i.test(i.text));
+      if (hasEnt1 && hasSai1) {
+        const ent2 = line.find(i => /ENT\.\s*2/i.test(i.text));
+        const sai2 = line.find(i => /SA[ÍI]\.\s*2/i.test(i.text));
+        const ent3 = line.find(i => /ENT\.\s*3/i.test(i.text));
+        const sai3 = line.find(i => /SA[ÍI]\.\s*3/i.test(i.text));
+        const dur = line.find(i => /DURA/i.test(i.text));
+        colPositions = {
+          ent1: hasEnt1.x,
+          sai1: hasSai1.x,
+          ent2: ent2?.x ?? hasSai1.x + 50,
+          sai2: sai2?.x ?? hasSai1.x + 100,
+          ent3: ent3?.x ?? hasSai1.x + 150,
+          sai3: sai3?.x ?? hasSai1.x + 200,
+          duracao: dur?.x ?? hasSai1.x + 250,
+        };
+        break;
+      }
+    }
+
+    if (!colPositions) continue;
+
+    // Parse day rows
+    for (const line of lines) {
+      const lineText = line.map(i => i.text).join(" ");
+      const dayMatch = lineText.match(/(\d{2}\/\d{2}\/\d{2})\s*-\s*(SEG|TER|QUA|QUI|SEX|SAB|DOM|FER)/i);
       if (!dayMatch) continue;
 
-      const dateStr = dayMatch[1]; // DD/MM/YY
-      const parts = dateStr.split("/");
+      const parts = dayMatch[1].split("/");
       let year = parseInt(parts[2]);
       if (year < 100) year += 2000;
       const fullDate = `${year}-${parts[1]}-${parts[0]}`;
 
-      // Extract times from line - look for HH:MM patterns
-      const afterDay = line.substring(dayMatch[0].length);
-      const times = afterDay.match(/\d{2}:\d{2}/g) || [];
+      // Find time values by matching to closest column X position
+      const timeItems = line.filter(i => /^\d{2}:\d{2}$/.test(i.text.trim()));
 
-      // Extract duration - usually format like "04:53" near the end
-      // The last time-like pattern could be duration if there are odd number of marks
-      // Let's parse more carefully
-      
-      // Get the rest of the line after the day marker
-      const restOfLine = afterDay.trim();
-      
-      // The structure is: MARCAÇÕES | ENT.1 | SAÍ.1 | ENT.2 | SAÍ.2 | ENT.3 | SAÍ.3 | DURAÇÃO | CH | ...
-      // Times in the line are: first the raw marcações, then ent1, sai1, ent2, sai2, ent3, sai3, duracao
-      // We can extract all HH:MM and map them
-      
-      // For now, extract unique time patterns
-      // The marcações field contains the raw punches, then they repeat in ent/sai columns, then duracao
-      
-      // Simple approach: find all HH:MM, the punches appear twice (raw + columns), duracao appears once at end
-      const allTimes = [...restOfLine.matchAll(/(\d{2}:\d{2})/g)].map(m => m[1]);
-      
-      // If no times, it's a day off / no records
-      if (allTimes.length === 0) continue;
+      const findClosest = (targetX: number, tolerance = 30): string | null => {
+        let best: typeof textItems[0] | null = null;
+        let bestDist = tolerance;
+        for (const item of timeItems) {
+          const dist = Math.abs(item.x - targetX);
+          if (dist < bestDist) { bestDist = dist; best = item; }
+        }
+        return best?.text || null;
+      };
 
-      // The raw marcações are listed first, then repeated individually
-      // For 2 punches: raw shows "13:25 18:18", then ent1=13:25, sai1=18:18, duracao=04:53
-      // So allTimes would be: [13:25, 18:18, 13:25, 18:18, 04:53]
-      // For 4 punches: [e1, s1, e2, s2, e1, s1, e2, s2, dur]
-      
-      // Determine number of punches: they appear in the marcações and again individually
-      // The duracao is the last time before the CH number
-      
-      let entrada_1: string | null = null;
-      let saida_1: string | null = null;
-      let entrada_2: string | null = null;
-      let saida_2: string | null = null;
-      let entrada_3: string | null = null;
-      let saida_3: string | null = null;
-      let duracao: string | null = null;
+      const entrada_1 = findClosest(colPositions.ent1);
+      const saida_1 = findClosest(colPositions.sai1);
+      const entrada_2 = findClosest(colPositions.ent2);
+      const saida_2 = findClosest(colPositions.sai2);
+      const entrada_3 = findClosest(colPositions.ent3);
+      const saida_3 = findClosest(colPositions.sai3);
+      const duracao = findClosest(colPositions.duracao);
 
-      // Find punches count by looking at raw marcações section
-      // The raw marcações are the times before they start repeating
-      // Simple heuristic: if times repeat, the first half is raw, second half is columns + duracao
-      
-      if (allTimes.length >= 1) {
-        // Try to figure out the structure
-        // With 2 punches: total times = 5 (2 raw + 2 cols + 1 dur)
-        // With 4 punches: total times = 9 (4 raw + 4 cols + 1 dur)
-        // With 6 punches: total times = 13 (6 raw + 6 cols + 1 dur)
-        
-        let numPunches = 0;
-        if (allTimes.length >= 5 && allTimes[0] === allTimes[2] && allTimes[1] === allTimes[3]) {
-          numPunches = 2;
-        } else if (allTimes.length >= 9 && allTimes[0] === allTimes[4] && allTimes[1] === allTimes[5]) {
-          numPunches = 4;
-        } else if (allTimes.length >= 13 && allTimes[0] === allTimes[6]) {
-          numPunches = 6;
-        } else if (allTimes.length >= 3) {
-          // Fallback: times don't repeat cleanly, try fewer
-          numPunches = Math.min(allTimes.length - 1, 6); // last one is probably duration
-        } else {
-          numPunches = allTimes.length;
-        }
-
-        // After raw marcações (numPunches), the individual columns start
-        const colStart = numPunches;
-        
-        if (numPunches >= 2 && allTimes.length > colStart) {
-          entrada_1 = allTimes[colStart] || null;
-          saida_1 = allTimes[colStart + 1] || null;
-        }
-        if (numPunches >= 4 && allTimes.length > colStart + 2) {
-          entrada_2 = allTimes[colStart + 2] || null;
-          saida_2 = allTimes[colStart + 3] || null;
-        }
-        if (numPunches >= 6 && allTimes.length > colStart + 4) {
-          entrada_3 = allTimes[colStart + 4] || null;
-          saida_3 = allTimes[colStart + 5] || null;
-        }
-        
-        // Duration is after the column entries
-        const duraIdx = colStart + numPunches;
-        if (duraIdx < allTimes.length) {
-          duracao = allTimes[duraIdx];
-        }
-      }
-
-      // Extract ocorrência/motivo from text after times
-      let ocorrencia: string | null = null;
-      let motivo: string | null = null;
+      // Skip days with no data at all
+      if (!entrada_1 && !saida_1 && !duracao) continue;
 
       records.push({
-        cpf: currentCpf,
-        nome: currentNome,
+        cpf: cpfVal,
+        nome,
         data: fullDate,
         entrada_1,
         saida_1,
@@ -200,8 +153,8 @@ function parseEspelhoPonto(text: string): PontoRecord[] {
         entrada_3,
         saida_3,
         duracao,
-        ocorrencia,
-        motivo,
+        ocorrencia: null,
+        motivo: null,
       });
     }
   }
