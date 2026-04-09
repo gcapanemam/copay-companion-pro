@@ -215,6 +215,100 @@ export type Database = {
         }
         Relationships: []
       }
+      comunicado_destinatarios: {
+        Row: {
+          comunicado_id: string
+          cpf: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          comunicado_id: string
+          cpf: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          comunicado_id?: string
+          cpf?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comunicado_destinatarios_comunicado_id_fkey"
+            columns: ["comunicado_id"]
+            isOneToOne: false
+            referencedRelation: "comunicados"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comunicado_leituras: {
+        Row: {
+          comunicado_id: string
+          confirmado_em: string | null
+          cpf: string
+          created_at: string
+          id: string
+          visualizado_em: string | null
+        }
+        Insert: {
+          comunicado_id: string
+          confirmado_em?: string | null
+          cpf: string
+          created_at?: string
+          id?: string
+          visualizado_em?: string | null
+        }
+        Update: {
+          comunicado_id?: string
+          confirmado_em?: string | null
+          cpf?: string
+          created_at?: string
+          id?: string
+          visualizado_em?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comunicado_leituras_comunicado_id_fkey"
+            columns: ["comunicado_id"]
+            isOneToOne: false
+            referencedRelation: "comunicados"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comunicados: {
+        Row: {
+          created_at: string
+          criado_por: string | null
+          id: string
+          mensagem: string
+          tipo_destinatario: string
+          titulo: string
+          valor_destinatario: string | null
+        }
+        Insert: {
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          mensagem: string
+          tipo_destinatario?: string
+          titulo: string
+          valor_destinatario?: string | null
+        }
+        Update: {
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          mensagem?: string
+          tipo_destinatario?: string
+          titulo?: string
+          valor_destinatario?: string | null
+        }
+        Relationships: []
+      }
       contracheques: {
         Row: {
           ano: number
