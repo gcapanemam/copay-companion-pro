@@ -1,16 +1,14 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Search, Users, Camera, User, FileText, MapPin, Heart, Briefcase, Phone, Stethoscope } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { toast } from "sonner";
+import { Loader2, Search, Users } from "lucide-react";
+import { FichaFuncionalDialog } from "./FichaFuncionalDialog";
 
 function getInitials(name: string) {
   return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
