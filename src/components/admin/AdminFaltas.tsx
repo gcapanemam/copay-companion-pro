@@ -238,7 +238,44 @@ export function AdminFaltas() {
 
   const handleDeletePonto = async (id: string) => {
     await supabase.from("registros_ponto").delete().eq("id", id);
+    setSelectedPonto(prev => { const n = new Set(prev); n.delete(id); return n; });
     queryClient.invalidateQueries({ queryKey: ["admin-registros-ponto"] });
+  };
+
+  const handleBulkDeletePonto = async () => {
+    if (selectedPonto.size === 0) return;
+    setDeletingPonto(true);
+    try {
+      const ids = [...selectedPonto];
+      for (let i = 0; i < ids.length; i += 50) {
+        const batch = ids.slice(i, i + 50);
+        await supabase.from("registros_ponto").delete().in("id", batch);
+      }
+      toast({ title: `${ids.length} registro(s) deletado(s)!` });
+      setSelectedPonto(new Set());
+      queryClient.invalidateQueries({ queryKey: ["admin-registros-ponto"] });
+    } catch (err: any) {
+      toast({ title: "Erro ao deletar", description: err.message, variant: "destructive" });
+    } finally {
+      setDeletingPonto(false);
+    }
+  };
+
+  const togglePontoSelection = (id: string) => {
+    setSelectedPonto(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+
+  const toggleAllPonto = () => {
+    const allIds = (registrosPonto || []).map((r: any) => r.id);
+    if (selectedPonto.size === allIds.length) {
+      setSelectedPonto(new Set());
+    } else {
+      setSelectedPonto(new Set(allIds));
+    }
   };
 
   const handleUploadPlanilha = async (e: React.ChangeEvent<HTMLInputElement>) => {
