@@ -70,6 +70,7 @@ export type Database = {
           data_cadastro_pis: string | null
           data_expedicao_rg: string | null
           data_nascimento: string | null
+          departamento: string | null
           dependentes_ir: string | null
           detalhes_vale_transporte: string | null
           email: string | null
@@ -114,6 +115,7 @@ export type Database = {
           data_cadastro_pis?: string | null
           data_expedicao_rg?: string | null
           data_nascimento?: string | null
+          departamento?: string | null
           dependentes_ir?: string | null
           detalhes_vale_transporte?: string | null
           email?: string | null
@@ -158,6 +160,7 @@ export type Database = {
           data_cadastro_pis?: string | null
           data_expedicao_rg?: string | null
           data_nascimento?: string | null
+          departamento?: string | null
           dependentes_ir?: string | null
           detalhes_vale_transporte?: string | null
           email?: string | null

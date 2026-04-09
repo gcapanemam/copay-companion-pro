@@ -163,6 +163,7 @@ export function AdminFuncionarios() {
                     <TableHead>CPF</TableHead>
                     <TableHead>Função</TableHead>
                     <TableHead>Unidade</TableHead>
+                    <TableHead>Departamento</TableHead>
                     <TableHead>Origem</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -181,6 +182,7 @@ export function AdminFuncionarios() {
                         <TableCell>{formatCpf(f.cpf)}</TableCell>
                         <TableCell>{f.dados?.funcao || f.admissao?.funcao || "-"}</TableCell>
                         <TableCell>{f.dados?.unidade || f.admissao?.unidade || "-"}</TableCell>
+                        <TableCell>{f.dados?.departamento || f.admissao?.departamento || "-"}</TableCell>
                         <TableCell>
                           <Badge variant={f.origem === "Ambos" ? "default" : "secondary"}>{f.origem}</Badge>
                         </TableCell>
@@ -222,6 +224,7 @@ export function AdminFuncionarios() {
                   <p className="text-sm text-muted-foreground">CPF: {formatCpf(selected.cpf)}</p>
                   {g("funcao") && <p className="text-sm">Função: {g("funcao")}</p>}
                   {g("unidade") && <p className="text-sm">Unidade: {g("unidade")}</p>}
+                  {g("departamento") && <p className="text-sm">Departamento: {g("departamento")}</p>}
                   <Badge variant={selected.origem === "Ambos" ? "default" : "secondary"}>{selected.origem}</Badge>
                 </div>
               </div>
