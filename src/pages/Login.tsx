@@ -72,6 +72,11 @@ const Login = () => {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Entrando..." : "Entrar"}
             </Button>
+            <div className="text-center">
+              <a href="/minha-area" className="text-sm text-muted-foreground hover:text-primary">
+                Portal do Funcionário →
+              </a>
+            </div>
           </form>
         </CardContent>
       </Card>
