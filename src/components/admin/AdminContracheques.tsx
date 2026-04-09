@@ -416,6 +416,13 @@ export function AdminContracheques() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!viewingUrl} onOpenChange={(open) => { if (!open) setViewingUrl(null); }}>
+        <DialogContent className="max-w-4xl h-[85vh]">
+          <DialogHeader><DialogTitle>{viewingName}</DialogTitle></DialogHeader>
+          {viewingUrl && <iframe src={viewingUrl} className="w-full flex-1 rounded border" style={{ minHeight: "70vh" }} />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
