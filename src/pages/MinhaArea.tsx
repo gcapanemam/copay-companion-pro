@@ -35,6 +35,7 @@ const MinhaArea = () => {
   const [epis, setEpis] = useState<any[]>([]);
   const [valeTransporte, setValeTransporte] = useState<any[]>([]);
   const [faltas, setFaltas] = useState<any[]>([]);
+  const [registrosPonto, setRegistrosPonto] = useState<any[]>([]);
   const [showIR, setShowIR] = useState(false);
   const { toast } = useToast();
 
@@ -65,6 +66,7 @@ const MinhaArea = () => {
       setEpis(data.epis || []);
       setValeTransporte(data.vale_transporte || []);
       setFaltas(data.faltas || []);
+      setRegistrosPonto(data.registros_ponto || []);
       setLoggedIn(true);
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
@@ -87,6 +89,7 @@ const MinhaArea = () => {
         setEpis(data.epis || []);
         setValeTransporte(data.vale_transporte || []);
         setFaltas(data.faltas || []);
+        setRegistrosPonto(data.registros_ponto || []);
       }
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
@@ -192,7 +195,7 @@ const MinhaArea = () => {
             <TabsTrigger value="contracheques" className="flex items-center gap-1"><FileText className="h-4 w-4" />Contracheques</TabsTrigger>
             <TabsTrigger value="epis" className="flex items-center gap-1"><ShieldCheck className="h-4 w-4" />EPIs</TabsTrigger>
             <TabsTrigger value="vt" className="flex items-center gap-1"><Bus className="h-4 w-4" />Vale-Transporte</TabsTrigger>
-            <TabsTrigger value="faltas" className="flex items-center gap-1"><CalendarX className="h-4 w-4" />Faltas</TabsTrigger>
+            <TabsTrigger value="faltas" className="flex items-center gap-1"><CalendarX className="h-4 w-4" />Ponto e Faltas</TabsTrigger>
           </TabsList>
 
           <TabsContent value="plano">
@@ -252,7 +255,7 @@ const MinhaArea = () => {
           </TabsContent>
 
           <TabsContent value="faltas">
-            <PortalFaltas faltas={faltas} />
+            <PortalFaltas faltas={faltas} registrosPonto={registrosPonto} />
           </TabsContent>
         </Tabs>
       </main>

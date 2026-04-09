@@ -122,6 +122,7 @@ Deno.serve(async (req) => {
       const { data: epis } = await supabase.from("epis").select("*").eq("cpf", cleanCpf).order("data_entrega", { ascending: false });
       const { data: valeTransporte } = await supabase.from("vale_transporte").select("*").eq("cpf", cleanCpf).eq("ano", selectedAno).order("mes");
       const { data: faltas } = await supabase.from("faltas").select("*").eq("cpf", cleanCpf).order("data_falta", { ascending: false });
+      const { data: registrosPonto } = await supabase.from("registros_ponto").select("*").eq("cpf", cleanCpf).order("data", { ascending: false });
 
       return jsonResponse({
         success: true,
@@ -134,6 +135,7 @@ Deno.serve(async (req) => {
         epis: epis || [],
         vale_transporte: valeTransporte || [],
         faltas: faltas || [],
+        registros_ponto: registrosPonto || [],
       });
     }
 
