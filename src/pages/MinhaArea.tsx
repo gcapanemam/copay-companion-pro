@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Activity, LogOut, Printer, Heart, FileText, ShieldCheck, Bus, CalendarX } from "lucide-react";
+import { Activity, LogOut, Printer, Heart, FileText, ShieldCheck, Bus, CalendarX, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,7 @@ import { PortalContracheques } from "@/components/portal/PortalContracheques";
 import { PortalEPIs } from "@/components/portal/PortalEPIs";
 import { PortalValeTransporte } from "@/components/portal/PortalValeTransporte";
 import { PortalFaltas } from "@/components/portal/PortalFaltas";
+import { PortalMeusDados } from "@/components/portal/PortalMeusDados";
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const HAPVIDA_CNPJ = "63.554.067/0001-98";
@@ -36,6 +37,7 @@ const MinhaArea = () => {
   const [valeTransporte, setValeTransporte] = useState<any[]>([]);
   const [faltas, setFaltas] = useState<any[]>([]);
   const [registrosPonto, setRegistrosPonto] = useState<any[]>([]);
+  const [admissao, setAdmissao] = useState<any>(null);
   const [showIR, setShowIR] = useState(false);
   const { toast } = useToast();
 
@@ -67,6 +69,7 @@ const MinhaArea = () => {
       setValeTransporte(data.vale_transporte || []);
       setFaltas(data.faltas || []);
       setRegistrosPonto(data.registros_ponto || []);
+      setAdmissao(data.admissao || null);
       setLoggedIn(true);
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
@@ -189,14 +192,19 @@ const MinhaArea = () => {
       </header>
 
       <main className="container mx-auto px-4 py-6">
-        <Tabs defaultValue="plano" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+        <Tabs defaultValue="dados" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="dados" className="flex items-center gap-1"><User className="h-4 w-4" />Meus Dados</TabsTrigger>
             <TabsTrigger value="plano" className="flex items-center gap-1"><Heart className="h-4 w-4" />Plano de Saúde</TabsTrigger>
             <TabsTrigger value="contracheques" className="flex items-center gap-1"><FileText className="h-4 w-4" />Contracheques</TabsTrigger>
             <TabsTrigger value="epis" className="flex items-center gap-1"><ShieldCheck className="h-4 w-4" />EPIs</TabsTrigger>
             <TabsTrigger value="vt" className="flex items-center gap-1"><Bus className="h-4 w-4" />Vale-Transporte</TabsTrigger>
             <TabsTrigger value="faltas" className="flex items-center gap-1"><CalendarX className="h-4 w-4" />Ponto e Faltas</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="dados">
+            <PortalMeusDados admissao={admissao} nome={nome} cpf={userCpf} />
+          </TabsContent>
 
           <TabsContent value="plano">
             <div className="flex justify-end mb-4">
