@@ -407,13 +407,27 @@ export function AdminFaltas() {
           </Card>
 
           <Card>
-            <CardHeader><CardTitle>Registros de Ponto</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Registros de Ponto</CardTitle>
+              {selectedPonto.size > 0 && (
+                <Button variant="destructive" size="sm" onClick={handleBulkDeletePonto} disabled={deletingPonto}>
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  {deletingPonto ? "Deletando..." : `Deletar ${selectedPonto.size} selecionado(s)`}
+                </Button>
+              )}
+            </CardHeader>
             <CardContent>
               {loadingPonto ? <Loader2 className="h-6 w-6 animate-spin mx-auto" /> : (
                 <div className="overflow-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-10">
+                          <Checkbox
+                            checked={registrosPonto && registrosPonto.length > 0 && selectedPonto.size === registrosPonto.length}
+                            onCheckedChange={toggleAllPonto}
+                          />
+                        </TableHead>
                         <TableHead>Funcionário</TableHead>
                         <TableHead>Data</TableHead>
                         <TableHead>Ent. 1</TableHead>
@@ -428,7 +442,13 @@ export function AdminFaltas() {
                     </TableHeader>
                     <TableBody>
                       {(registrosPonto || []).map((r: any) => (
-                        <TableRow key={r.id}>
+                        <TableRow key={r.id} className={selectedPonto.has(r.id) ? "bg-muted/50" : ""}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedPonto.has(r.id)}
+                              onCheckedChange={() => togglePontoSelection(r.id)}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">{getNome(r.cpf)}</TableCell>
                           <TableCell>{new Date(r.data).toLocaleDateString("pt-BR")}</TableCell>
                           <TableCell>{r.entrada_1 || "-"}</TableCell>
