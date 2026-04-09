@@ -474,6 +474,54 @@ export type Database = {
           },
         ]
       }
+      registros_ponto: {
+        Row: {
+          cpf: string
+          created_at: string
+          data: string
+          duracao: string | null
+          entrada_1: string | null
+          entrada_2: string | null
+          entrada_3: string | null
+          id: string
+          motivo: string | null
+          ocorrencia: string | null
+          saida_1: string | null
+          saida_2: string | null
+          saida_3: string | null
+        }
+        Insert: {
+          cpf: string
+          created_at?: string
+          data: string
+          duracao?: string | null
+          entrada_1?: string | null
+          entrada_2?: string | null
+          entrada_3?: string | null
+          id?: string
+          motivo?: string | null
+          ocorrencia?: string | null
+          saida_1?: string | null
+          saida_2?: string | null
+          saida_3?: string | null
+        }
+        Update: {
+          cpf?: string
+          created_at?: string
+          data?: string
+          duracao?: string | null
+          entrada_1?: string | null
+          entrada_2?: string | null
+          entrada_3?: string | null
+          id?: string
+          motivo?: string | null
+          ocorrencia?: string | null
+          saida_1?: string | null
+          saida_2?: string | null
+          saida_3?: string | null
+        }
+        Relationships: []
+      }
       titulares: {
         Row: {
           cpf: string | null
