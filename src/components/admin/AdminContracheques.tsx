@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Trash2, Loader2, FileUp, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, Trash2, Loader2, FileUp, CheckCircle2, AlertCircle, Eye } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import * as pdfjsLib from "pdfjs-dist";
 import { PDFDocument } from "pdf-lib";
@@ -42,6 +43,8 @@ export function AdminContracheques() {
   const [bulkUploading, setBulkUploading] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
   const [bulkResults, setBulkResults] = useState<BulkResult[]>([]);
+  const [viewingUrl, setViewingUrl] = useState<string | null>(null);
+  const [viewingName, setViewingName] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -393,9 +396,17 @@ export function AdminContracheques() {
                       <TableCell>{MESES_NOME[(c.mes || 1) - 1]} / {c.ano}</TableCell>
                       <TableCell>{c.nome_arquivo}</TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(c.id, c.arquivo_path)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" onClick={async () => {
+                            const { data } = await supabase.storage.from("contracheques").createSignedUrl(c.arquivo_path, 300);
+                            if (data?.signedUrl) { setViewingUrl(data.signedUrl); setViewingName(c.nome_arquivo); }
+                          }}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDelete(c.id, c.arquivo_path)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -405,6 +416,13 @@ export function AdminContracheques() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!viewingUrl} onOpenChange={(open) => { if (!open) setViewingUrl(null); }}>
+        <DialogContent className="max-w-4xl h-[85vh]">
+          <DialogHeader><DialogTitle>{viewingName}</DialogTitle></DialogHeader>
+          {viewingUrl && <iframe src={viewingUrl} className="w-full flex-1 rounded border" style={{ minHeight: "70vh" }} />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
