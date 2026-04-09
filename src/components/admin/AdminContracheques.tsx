@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -7,10 +7,30 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Trash2, Loader2 } from "lucide-react";
+import { Upload, Trash2, Loader2, FileUp, CheckCircle2, AlertCircle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import * as pdfjsLib from "pdfjs-dist";
+import { PDFDocument } from "pdf-lib";
 
-const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+const MESES_NOME = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const MESES_MAP: Record<string, number> = {
+  "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
+  "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
+};
+
+function normalize(s: string) {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+interface BulkResult {
+  page: number;
+  nome: string;
+  matched: boolean;
+  cpf?: string;
+  message: string;
+}
 
 export function AdminContracheques() {
   const [cpf, setCpf] = useState("");
@@ -18,6 +38,10 @@ export function AdminContracheques() {
   const [ano, setAno] = useState(String(new Date().getFullYear()));
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
+  const [bulkResults, setBulkResults] = useState<BulkResult[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -86,10 +110,230 @@ export function AdminContracheques() {
     toast({ title: "Removido" });
   };
 
+  const extractPageInfo = async (pdf: pdfjsLib.PDFDocumentProxy, pageNum: number): Promise<{ nome: string; mes: number; ano: number } | null> => {
+    const page = await pdf.getPage(pageNum);
+    const content = await page.getTextContent();
+    const items = content.items as any[];
+    
+    // Sort by Y (top to bottom) then X (left to right)
+    items.sort((a: any, b: any) => {
+      const yDiff = b.transform[5] - a.transform[5];
+      if (Math.abs(yDiff) > 3) return yDiff;
+      return a.transform[4] - b.transform[4];
+    });
+
+    const lines: string[] = [];
+    let lastY = -1;
+    let lineText = "";
+    for (const item of items) {
+      const y = Math.round(item.transform[5]);
+      if (lastY !== -1 && Math.abs(y - lastY) > 3) {
+        lines.push(lineText.trim());
+        lineText = "";
+      }
+      if (lineText && item.str) lineText += " ";
+      lineText += item.str;
+      lastY = y;
+    }
+    if (lineText) lines.push(lineText.trim());
+
+    // Find employee name - it's in the line after "Código Nome do Funcionário" header
+    // or it's the line containing the employee name (usually line with code number + name)
+    let nome = "";
+    let mesNum = 0;
+    let anoNum = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Extract month/year from "Março de 2026" pattern
+      const mesMatch = line.match(/(\w+)\s+de\s+(\d{4})/i);
+      if (mesMatch && !mesNum) {
+        const mesNome = normalize(mesMatch[1]);
+        if (MESES_MAP[mesNome]) {
+          mesNum = MESES_MAP[mesNome];
+          anoNum = parseInt(mesMatch[2]);
+        }
+      }
+
+      // The employee name line typically starts with a number (code) followed by the name
+      // It appears after "Código Nome do Funcionário CBO Departamento Filial"
+      if (line.match(/^C.digo\s+Nome/i) || line.match(/Nome do Funcion/i)) {
+        // Next non-empty line should have: code + name
+        for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+          const nextLine = lines[j].trim();
+          // Match: number followed by name (e.g., "108 ALESSANDRA DE OLIVEIRA...")
+          const nameMatch = nextLine.match(/^\d+\s+(.+)/);
+          if (nameMatch && !nome) {
+            // The name might contain the role after it, remove CBO number and what follows
+            let rawName = nameMatch[1];
+            // Remove trailing numbers (CBO, dept, filial)
+            rawName = rawName.replace(/\s+\d+\s*$/, "").replace(/\s+\d+\s+\d+\s*$/, "");
+            // Remove role if it's on the same line (e.g., "MONITOR 334105 1 1")
+            const parts = rawName.split(/\s{2,}/);
+            nome = parts[0].trim();
+            break;
+          }
+        }
+      }
+    }
+
+    if (!nome || !mesNum || !anoNum) return null;
+    return { nome, mes: mesNum, ano: anoNum };
+  };
+
+  const handleBulkUpload = useCallback(async () => {
+    if (!bulkFile || !beneficiarios) return;
+    setBulkUploading(true);
+    setBulkResults([]);
+
+    try {
+      const arrayBuffer = await bulkFile.arrayBuffer();
+      const pdfBytes = new Uint8Array(arrayBuffer);
+      
+      // Load with pdf.js for text extraction
+      const pdfJs = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise;
+      // Load with pdf-lib for splitting
+      const pdfLib = await PDFDocument.load(pdfBytes);
+      
+      const totalPages = pdfJs.numPages;
+      // Each page appears twice (employee copy + employer copy), so we process only odd pages
+      // Actually from the parsed doc, each physical page has 2 copies. Let's check if numPages matches.
+      // The PDF seems to have 1 page per employee with 2 copies on the same page.
+      // So each page = 1 employee.
+      
+      const results: BulkResult[] = [];
+      const seenPages = new Set<string>(); // avoid duplicates from 2 copies per page
+      
+      setBulkProgress({ current: 0, total: totalPages });
+
+      for (let p = 1; p <= totalPages; p++) {
+        setBulkProgress({ current: p, total: totalPages });
+        
+        const info = await extractPageInfo(pdfJs, p);
+        if (!info) {
+          results.push({ page: p, nome: "?", matched: false, message: "Não foi possível extrair dados" });
+          continue;
+        }
+
+        // Deduplicate (same name+mes+ano already processed)
+        const key = `${normalize(info.nome)}_${info.mes}_${info.ano}`;
+        if (seenPages.has(key)) continue;
+        seenPages.add(key);
+
+        // Match name to titular
+        const normalizedName = normalize(info.nome);
+        const match = beneficiarios.find(b => {
+          const bName = normalize(b.nome);
+          return bName === normalizedName || bName.includes(normalizedName) || normalizedName.includes(bName);
+        });
+
+        if (!match || !match.cpf) {
+          results.push({ page: p, nome: info.nome, matched: false, message: "Funcionário não encontrado" });
+          continue;
+        }
+
+        try {
+          // Extract single page as PDF
+          const newPdf = await PDFDocument.create();
+          const [copiedPage] = await newPdf.copyPages(pdfLib, [p - 1]);
+          newPdf.addPage(copiedPage);
+          const singlePageBytes = await newPdf.save();
+
+          const cleanCpf = match.cpf.replace(/\D/g, "");
+          const mesStr = String(info.mes).padStart(2, "0");
+          const path = `${cleanCpf}/${info.ano}_${mesStr}_contracheque.pdf`;
+          const fileName = `Contracheque_${MESES_NOME[info.mes - 1]}_${info.ano}.pdf`;
+
+          // Upload to storage
+          const { error: uploadErr } = await supabase.storage
+            .from("contracheques")
+            .upload(path, singlePageBytes, { upsert: true, contentType: "application/pdf" });
+          if (uploadErr) throw uploadErr;
+
+          // Check if record already exists
+          const { data: existing } = await supabase.from("contracheques")
+            .select("id")
+            .eq("cpf", cleanCpf)
+            .eq("mes", info.mes)
+            .eq("ano", info.ano)
+            .maybeSingle();
+
+          if (existing) {
+            await supabase.from("contracheques").update({ arquivo_path: path, nome_arquivo: fileName }).eq("id", existing.id);
+          } else {
+            const { error: dbErr } = await supabase.from("contracheques").insert({
+              cpf: cleanCpf,
+              mes: info.mes,
+              ano: info.ano,
+              arquivo_path: path,
+              nome_arquivo: fileName,
+            });
+            if (dbErr) throw dbErr;
+          }
+
+          results.push({ page: p, nome: info.nome, matched: true, cpf: cleanCpf, message: `${MESES_NOME[info.mes - 1]}/${info.ano}` });
+        } catch (err: any) {
+          results.push({ page: p, nome: info.nome, matched: false, message: err.message });
+        }
+      }
+
+      setBulkResults(results);
+      const successCount = results.filter(r => r.matched).length;
+      toast({
+        title: "Processamento concluído",
+        description: `${successCount} de ${results.length} contracheque(s) importado(s).`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["admin-contracheques"] });
+    } catch (err: any) {
+      toast({ title: "Erro ao processar PDF", description: err.message, variant: "destructive" });
+    } finally {
+      setBulkUploading(false);
+    }
+  }, [bulkFile, beneficiarios, toast, queryClient]);
+
   return (
     <div className="space-y-6">
+      {/* Bulk Upload */}
+      <Card className="border-dashed border-2 border-primary/30">
+        <CardHeader><CardTitle className="flex items-center gap-2"><FileUp className="h-5 w-5" /> Importação em Massa (PDF com múltiplos funcionários)</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Envie o PDF completo de recibos de pagamento. O sistema identifica automaticamente cada funcionário pelo nome e separa os contracheques individuais.
+          </p>
+          <div className="flex gap-4 items-end">
+            <div className="flex-1 space-y-2">
+              <Label>PDF de Recibos</Label>
+              <Input type="file" accept=".pdf" onChange={(e) => { setBulkFile(e.target.files?.[0] || null); setBulkResults([]); }} />
+            </div>
+            <Button onClick={handleBulkUpload} disabled={bulkUploading || !bulkFile}>
+              {bulkUploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+              {bulkUploading ? `Processando ${bulkProgress.current}/${bulkProgress.total}...` : "Processar e Importar"}
+            </Button>
+          </div>
+
+          {bulkResults.length > 0 && (
+            <div className="space-y-1 max-h-60 overflow-y-auto border rounded p-3">
+              <p className="text-sm font-medium mb-2">
+                <CheckCircle2 className="h-4 w-4 inline text-green-600 mr-1" />
+                {bulkResults.filter(r => r.matched).length} importado(s) |
+                <AlertCircle className="h-4 w-4 inline text-red-500 mx-1" />
+                {bulkResults.filter(r => !r.matched).length} não encontrado(s)
+              </p>
+              {bulkResults.map((r, i) => (
+                <div key={i} className={`text-xs flex justify-between items-center px-3 py-1.5 rounded ${r.matched ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
+                  <span className="truncate mr-2">Pág {r.page}: {r.nome}</span>
+                  <span className="shrink-0">{r.matched ? `✓ ${formatCpf(r.cpf!)} - ${r.message}` : r.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Manual Upload */}
       <Card>
-        <CardHeader><CardTitle>Upload de Contracheque</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Upload Individual</CardTitle></CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
             <div className="space-y-2">
@@ -108,7 +352,7 @@ export function AdminContracheques() {
               <Select value={mes} onValueChange={setMes}>
                 <SelectTrigger><SelectValue placeholder="Mês" /></SelectTrigger>
                 <SelectContent>
-                  {MESES.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
+                  {MESES_NOME.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -128,6 +372,7 @@ export function AdminContracheques() {
         </CardContent>
       </Card>
 
+      {/* Lista */}
       <Card>
         <CardHeader><CardTitle>Contracheques Cadastrados</CardTitle></CardHeader>
         <CardContent>
@@ -137,6 +382,7 @@ export function AdminContracheques() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Funcionário</TableHead>
                   <TableHead>CPF</TableHead>
                   <TableHead>Mês/Ano</TableHead>
                   <TableHead>Arquivo</TableHead>
@@ -144,18 +390,22 @@ export function AdminContracheques() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(contracheques || []).map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell>{formatCpf(c.cpf)}</TableCell>
-                    <TableCell>{MESES[(c.mes || 1) - 1]} / {c.ano}</TableCell>
-                    <TableCell>{c.nome_arquivo}</TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(c.id, c.arquivo_path)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {(contracheques || []).map((c) => {
+                  const ben = beneficiarios?.find(b => b.cpf?.replace(/\D/g, "") === c.cpf.replace(/\D/g, ""));
+                  return (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">{ben?.nome || "—"}</TableCell>
+                      <TableCell>{formatCpf(c.cpf)}</TableCell>
+                      <TableCell>{MESES_NOME[(c.mes || 1) - 1]} / {c.ano}</TableCell>
+                      <TableCell>{c.nome_arquivo}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(c.id, c.arquivo_path)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
