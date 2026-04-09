@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,21 @@ import * as pdfjsLib from "pdfjs-dist";
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs`;
 
 const TIPOS_FALTA = ["Falta", "Atestado", "Licença Médica", "Licença Maternidade", "Licença Paternidade", "Suspensão", "Outro"];
+const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+type PontoColumnKey = "entrada_1" | "saida_1" | "entrada_2" | "saida_2" | "entrada_3" | "saida_3" | "duracao";
+
+interface PositionedText {
+  text: string;
+  x: number;
+  y: number;
+}
+
+interface PontoColumnRange {
+  key: PontoColumnKey;
+  min: number;
+  max: number;
+}
 
 interface PontoRecord {
   cpf: string;
@@ -34,6 +49,104 @@ interface PontoRecord {
   motivo: string | null;
 }
 
+const normalizeCpf = (value: string | null | undefined) => (value || "").replace(/\D/g, "");
+
+const formatDateBr = (value: string) => {
+  const [year, month, day] = value.split("-");
+  return year && month && day ? `${day}/${month}/${year}` : value;
+};
+
+const formatMonthLabel = (monthKey: string) => {
+  const [year, month] = monthKey.split("-");
+  const monthIndex = Number(month) - 1;
+  return monthIndex >= 0 && monthIndex < MESES.length ? `${MESES[monthIndex]}/${year}` : monthKey;
+};
+
+const buildColumnRanges = (positions: Array<{ key: PontoColumnKey; x: number }>) => {
+  return positions.map((column, index) => ({
+    key: column.key,
+    min: index === 0 ? column.x - 12 : Math.floor((positions[index - 1].x + column.x) / 2),
+    max: index === positions.length - 1 ? column.x + 24 : Math.ceil((column.x + positions[index + 1].x) / 2),
+  }));
+};
+
+const DEFAULT_COLUMN_RANGES: PontoColumnRange[] = buildColumnRanges([
+  { key: "entrada_1", x: 179 },
+  { key: "saida_1", x: 205 },
+  { key: "entrada_2", x: 229 },
+  { key: "saida_2", x: 255 },
+  { key: "entrada_3", x: 279 },
+  { key: "saida_3", x: 305 },
+  { key: "duracao", x: 329 },
+]);
+
+function groupTextItemsIntoLines(items: any[]): PositionedText[][] {
+  const textItems = items
+    .map((item) => ({
+      text: item.str as string,
+      x: Math.round(item.transform[4]),
+      y: Math.round(item.transform[5]),
+    }))
+    .filter((item) => item.text.trim());
+
+  const lineMap = new Map<number, PositionedText[]>();
+  for (const item of textItems) {
+    let matchedY: number | null = null;
+    for (const y of lineMap.keys()) {
+      if (Math.abs(y - item.y) <= 3) {
+        matchedY = y;
+        break;
+      }
+    }
+
+    const lineY = matchedY ?? item.y;
+    if (!lineMap.has(lineY)) lineMap.set(lineY, []);
+    lineMap.get(lineY)!.push(item);
+  }
+
+  return [...lineMap.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([, lineItems]) => [...lineItems].sort((a, b) => a.x - b.x));
+}
+
+function getValueAfterLabel(line: PositionedText[], labelRegex: RegExp) {
+  const labelIndex = line.findIndex((item) => labelRegex.test(item.text));
+  if (labelIndex < 0) return "";
+
+  const values: string[] = [];
+  for (let index = labelIndex + 1; index < line.length; index++) {
+    if (/:$/.test(line[index].text)) break;
+    values.push(line[index].text);
+  }
+
+  return values.join(" ").trim();
+}
+
+function getColumnRanges(lines: PositionedText[][]) {
+  const headerLine = lines.find((line) => line.some((item) => /^ENT\.\s*1$/i.test(item.text)) && line.some((item) => /^SA[ÍI]\.\s*1$/i.test(item.text)));
+  if (!headerLine) return DEFAULT_COLUMN_RANGES;
+
+  const ent1 = headerLine.find((item) => /^ENT\.\s*1$/i.test(item.text));
+  const sai1 = headerLine.find((item) => /^SA[ÍI]\.\s*1$/i.test(item.text));
+  const ent2 = headerLine.find((item) => /^ENT\.\s*2$/i.test(item.text));
+  const sai2 = headerLine.find((item) => /^SA[ÍI]\.\s*2$/i.test(item.text));
+  const ent3 = headerLine.find((item) => /^ENT\.\s*3$/i.test(item.text));
+  const sai3 = headerLine.find((item) => /^SA[ÍI]\.\s*3$/i.test(item.text));
+  const duracao = headerLine.find((item) => /^DURAÇÃO$/i.test(item.text));
+
+  if (!ent1 || !sai1 || !duracao) return DEFAULT_COLUMN_RANGES;
+
+  return buildColumnRanges([
+    { key: "entrada_1", x: ent1.x },
+    { key: "saida_1", x: sai1.x },
+    { key: "entrada_2", x: ent2?.x ?? 229 },
+    { key: "saida_2", x: sai2?.x ?? 255 },
+    { key: "entrada_3", x: ent3?.x ?? 279 },
+    { key: "saida_3", x: sai3?.x ?? 305 },
+    { key: "duracao", x: duracao.x },
+  ]);
+}
+
 async function parsePontoPdf(file: File): Promise<PontoRecord[]> {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -42,119 +155,53 @@ async function parsePontoPdf(file: File): Promise<PontoRecord[]> {
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
-    const items = content.items as any[];
-
-    // Collect all text items with positions
-    const textItems = items.map(item => ({
-      text: item.str as string,
-      x: Math.round(item.transform[4]),
-      y: Math.round(item.transform[5]),
-    })).filter(t => t.text.trim());
-
-    // Group by Y (lines) with tolerance
-    const lineMap = new Map<number, typeof textItems>();
-    for (const item of textItems) {
-      let foundY = -1;
-      for (const key of lineMap.keys()) {
-        if (Math.abs(key - item.y) <= 3) { foundY = key; break; }
-      }
-      const useY = foundY >= 0 ? foundY : item.y;
-      if (!lineMap.has(useY)) lineMap.set(useY, []);
-      lineMap.get(useY)!.push(item);
-    }
-
-    // Sort lines top to bottom, items left to right
-    const lines = [...lineMap.entries()]
-      .sort((a, b) => b[0] - a[0])
-      .map(([, items]) => items.sort((a, b) => a.x - b.x));
-
-    // Find NOME and CPF from header
-    let nome = "";
-    let cpfVal = "";
-    for (const line of lines) {
-      const lineText = line.map(i => i.text).join(" ");
-      const nomeMatch = lineText.match(/NOME:\s*(.+?)(?:\s{2,}|PIS|$)/i);
-      if (nomeMatch) nome = nomeMatch[1].trim();
-      const cpfMatch = lineText.match(/CPF:\s*(\d[\d.\-/]+\d)/i);
-      if (cpfMatch) cpfVal = cpfMatch[1].replace(/\D/g, "");
-    }
-
+    const lines = groupTextItemsIntoLines(content.items as any[]);
+    const nome = getValueAfterLabel(lines.find((line) => line.some((item) => /^NOME:?$/i.test(item.text))) || [], /^NOME:?$/i);
+    const cpfVal = normalizeCpf(getValueAfterLabel(lines.find((line) => line.some((item) => /^CPF:?$/i.test(item.text))) || [], /^CPF:?$/i));
     if (!cpfVal) continue;
 
-    // Find the header row to determine column X positions
-    let colPositions: { ent1: number; sai1: number; ent2: number; sai2: number; ent3: number; sai3: number; duracao: number } | null = null;
-    for (const line of lines) {
-      const hasEnt1 = line.find(i => /ENT\.\s*1/i.test(i.text));
-      const hasSai1 = line.find(i => /SA[ÍI]\.\s*1/i.test(i.text));
-      if (hasEnt1 && hasSai1) {
-        const ent2 = line.find(i => /ENT\.\s*2/i.test(i.text));
-        const sai2 = line.find(i => /SA[ÍI]\.\s*2/i.test(i.text));
-        const ent3 = line.find(i => /ENT\.\s*3/i.test(i.text));
-        const sai3 = line.find(i => /SA[ÍI]\.\s*3/i.test(i.text));
-        const dur = line.find(i => /DURA/i.test(i.text));
-        colPositions = {
-          ent1: hasEnt1.x,
-          sai1: hasSai1.x,
-          ent2: ent2?.x ?? hasSai1.x + 50,
-          sai2: sai2?.x ?? hasSai1.x + 100,
-          ent3: ent3?.x ?? hasSai1.x + 150,
-          sai3: sai3?.x ?? hasSai1.x + 200,
-          duracao: dur?.x ?? hasSai1.x + 250,
-        };
-        break;
-      }
-    }
+    const columnRanges = getColumnRanges(lines);
 
-    if (!colPositions) continue;
-
-    // Parse day rows
     for (const line of lines) {
-      const lineText = line.map(i => i.text).join(" ");
-      const dayMatch = lineText.match(/(\d{2}\/\d{2}\/\d{2})\s*-\s*(SEG|TER|QUA|QUI|SEX|SAB|DOM|FER)/i);
+      const dayItem = line.find((item) => /^\d{2}\/\d{2}\/\d{2}\s*-\s*(SEG|TER|QUA|QUI|SEX|SAB|DOM|FER)/i.test(item.text));
+      if (!dayItem) continue;
+
+      const dayMatch = dayItem.text.match(/^(\d{2})\/(\d{2})\/(\d{2})/);
       if (!dayMatch) continue;
 
-      const parts = dayMatch[1].split("/");
-      let year = parseInt(parts[2]);
-      if (year < 100) year += 2000;
-      const fullDate = `${year}-${parts[1]}-${parts[0]}`;
-
-      // Find time values by matching to closest column X position
-      const timeItems = line.filter(i => /^\d{2}:\d{2}$/.test(i.text.trim()));
-
-      const findClosest = (targetX: number, tolerance = 30): string | null => {
-        let best: typeof textItems[0] | null = null;
-        let bestDist = tolerance;
-        for (const item of timeItems) {
-          const dist = Math.abs(item.x - targetX);
-          if (dist < bestDist) { bestDist = dist; best = item; }
-        }
-        return best?.text || null;
+      const [, day, month, shortYear] = dayMatch;
+      const year = Number(shortYear) < 100 ? 2000 + Number(shortYear) : Number(shortYear);
+      const horarios: Record<PontoColumnKey, string | null> = {
+        entrada_1: null,
+        saida_1: null,
+        entrada_2: null,
+        saida_2: null,
+        entrada_3: null,
+        saida_3: null,
+        duracao: null,
       };
 
-      const entrada_1 = findClosest(colPositions.ent1);
-      const saida_1 = findClosest(colPositions.sai1);
-      const entrada_2 = findClosest(colPositions.ent2);
-      const saida_2 = findClosest(colPositions.sai2);
-      const entrada_3 = findClosest(colPositions.ent3);
-      const saida_3 = findClosest(colPositions.sai3);
-      const duracao = findClosest(colPositions.duracao);
+      for (const item of line) {
+        const value = item.text.trim();
+        if (!/^\d{2}:\d{2}$/.test(value)) continue;
 
-      // Skip days with no data at all
-      if (!entrada_1 && !saida_1 && !duracao) continue;
+        const column = columnRanges.find((range) => item.x >= range.min && item.x < range.max);
+        if (!column || horarios[column.key]) continue;
+        horarios[column.key] = value;
+      }
+
+      if (!Object.values(horarios).some(Boolean)) continue;
+
+      const ocorrencia = line.filter((item) => item.x >= 430 && item.x < 480).map((item) => item.text).join(" ").trim() || null;
+      const motivo = line.filter((item) => item.x >= 480).map((item) => item.text).join(" ").trim() || null;
 
       records.push({
         cpf: cpfVal,
         nome,
-        data: fullDate,
-        entrada_1,
-        saida_1,
-        entrada_2,
-        saida_2,
-        entrada_3,
-        saida_3,
-        duracao,
-        ocorrencia: null,
-        motivo: null,
+        data: `${year}-${month}-${day}`,
+        ...horarios,
+        ocorrencia,
+        motivo,
       });
     }
   }
@@ -172,6 +219,7 @@ export function AdminFaltas() {
   const [importing, setImporting] = useState(false);
   const [importLog, setImportLog] = useState<string[]>([]);
   const [selectedPonto, setSelectedPonto] = useState<Set<string>>(new Set());
+  const [selectedFuncionarioPonto, setSelectedFuncionarioPonto] = useState("");
   const [deletingPonto, setDeletingPonto] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -188,7 +236,7 @@ export function AdminFaltas() {
   const { data: registrosPonto, isLoading: loadingPonto } = useQuery({
     queryKey: ["admin-registros-ponto"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("registros_ponto").select("*").order("data", { ascending: false }).limit(200);
+      const { data, error } = await supabase.from("registros_ponto").select("*").order("data", { ascending: false }).range(0, 5000);
       if (error) throw error;
       return data;
     },
@@ -202,7 +250,56 @@ export function AdminFaltas() {
     },
   });
 
-  const getNome = (cpfVal: string) => (beneficiarios || []).find(x => x.cpf?.replace(/\D/g, "") === cpfVal)?.nome || cpfVal;
+  const getNome = (cpfVal: string) => (beneficiarios || []).find(x => normalizeCpf(x.cpf) === cpfVal)?.nome || cpfVal;
+
+  const pontoAgrupado = useMemo(() => {
+    const grupos = new Map<string, { cpf: string; nome: string; registros: any[]; meses: Map<string, any[]> }>();
+
+    for (const registro of registrosPonto || []) {
+      const cpfRegistro = normalizeCpf(registro.cpf);
+      if (!cpfRegistro) continue;
+
+      if (!grupos.has(cpfRegistro)) {
+        grupos.set(cpfRegistro, {
+          cpf: cpfRegistro,
+          nome: getNome(cpfRegistro),
+          registros: [],
+          meses: new Map(),
+        });
+      }
+
+      const grupo = grupos.get(cpfRegistro)!;
+      const monthKey = String(registro.data).slice(0, 7);
+      grupo.registros.push(registro);
+      if (!grupo.meses.has(monthKey)) grupo.meses.set(monthKey, []);
+      grupo.meses.get(monthKey)!.push(registro);
+    }
+
+    return [...grupos.values()]
+      .map((grupo) => ({
+        ...grupo,
+        registros: [...grupo.registros].sort((a, b) => String(a.data).localeCompare(String(b.data))),
+        meses: [...grupo.meses.entries()]
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([key, registros]) => ({
+            key,
+            label: formatMonthLabel(key),
+            registros: [...registros].sort((a, b) => String(a.data).localeCompare(String(b.data))),
+          })),
+      }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  }, [registrosPonto, beneficiarios]);
+
+  useEffect(() => {
+    if (pontoAgrupado.length === 0) {
+      if (selectedFuncionarioPonto) setSelectedFuncionarioPonto("");
+      return;
+    }
+
+    if (!selectedFuncionarioPonto || !pontoAgrupado.some((grupo) => grupo.cpf === selectedFuncionarioPonto)) {
+      setSelectedFuncionarioPonto(pontoAgrupado[0].cpf);
+    }
+  }, [pontoAgrupado, selectedFuncionarioPonto]);
 
   const handleAdd = async () => {
     if (!cpf || !dataFalta) {
@@ -269,13 +366,16 @@ export function AdminFaltas() {
     });
   };
 
-  const toggleAllPonto = () => {
-    const allIds = (registrosPonto || []).map((r: any) => r.id);
-    if (selectedPonto.size === allIds.length) {
-      setSelectedPonto(new Set());
-    } else {
-      setSelectedPonto(new Set(allIds));
-    }
+  const toggleAllPonto = (ids: string[]) => {
+    setSelectedPonto((prev) => {
+      const next = new Set(prev);
+      const allSelected = ids.length > 0 && ids.every((id) => next.has(id));
+      ids.forEach((id) => {
+        if (allSelected) next.delete(id);
+        else next.add(id);
+      });
+      return next;
+    });
   };
 
   const handleUploadPlanilha = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -317,8 +417,18 @@ export function AdminFaltas() {
       }
 
       const log: string[] = [];
-      const uniqueEmployees = new Set(records.map(r => r.nome));
-      log.push(`Encontrados ${records.length} registros de ${uniqueEmployees.size} funcionário(s)`);
+      const resumoFuncionarios = new Map<string, { nome: string; meses: Map<string, number> }>();
+      for (const record of records) {
+        const key = `${record.cpf}-${record.nome || record.cpf}`;
+        if (!resumoFuncionarios.has(key)) {
+          resumoFuncionarios.set(key, { nome: record.nome || record.cpf, meses: new Map() });
+        }
+        const resumo = resumoFuncionarios.get(key)!;
+        const monthKey = record.data.slice(0, 7);
+        resumo.meses.set(monthKey, (resumo.meses.get(monthKey) || 0) + 1);
+      }
+
+      log.push(`Encontrados ${records.length} registros de ${resumoFuncionarios.size} funcionário(s)`);
 
       let inserted = 0;
       let skipped = 0;
@@ -344,9 +454,12 @@ export function AdminFaltas() {
         }
       }
 
-      for (const nome of uniqueEmployees) {
-        const count = records.filter(r => r.nome === nome).length;
-        log.push(`✅ ${nome}: ${count} dias`);
+      for (const resumo of [...resumoFuncionarios.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))) {
+        const meses = [...resumo.meses.entries()]
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([monthKey, count]) => `${formatMonthLabel(monthKey)} (${count} dia(s))`)
+          .join(", ");
+        log.push(`✅ ${resumo.nome}: ${meses}`);
       }
       log.push(`Total importado: ${inserted} | Erros: ${skipped}`);
 
@@ -417,59 +530,104 @@ export function AdminFaltas() {
               )}
             </CardHeader>
             <CardContent>
-              {loadingPonto ? <Loader2 className="h-6 w-6 animate-spin mx-auto" /> : (
-                <div className="overflow-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-10">
-                          <Checkbox
-                            checked={registrosPonto && registrosPonto.length > 0 && selectedPonto.size === registrosPonto.length}
-                            onCheckedChange={toggleAllPonto}
-                          />
-                        </TableHead>
-                        <TableHead>Funcionário</TableHead>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Ent. 1</TableHead>
-                        <TableHead>Saí. 1</TableHead>
-                        <TableHead>Ent. 2</TableHead>
-                        <TableHead>Saí. 2</TableHead>
-                        <TableHead>Ent. 3</TableHead>
-                        <TableHead>Saí. 3</TableHead>
-                        <TableHead>Duração</TableHead>
-                        <TableHead></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(registrosPonto || []).map((r: any) => (
-                        <TableRow key={r.id} className={selectedPonto.has(r.id) ? "bg-muted/50" : ""}>
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedPonto.has(r.id)}
-                              onCheckedChange={() => togglePontoSelection(r.id)}
-                            />
-                          </TableCell>
-                          <TableCell className="font-medium">{getNome(r.cpf)}</TableCell>
-                          <TableCell>{new Date(r.data).toLocaleDateString("pt-BR")}</TableCell>
-                          <TableCell>{r.entrada_1 || "-"}</TableCell>
-                          <TableCell>{r.saida_1 || "-"}</TableCell>
-                          <TableCell>{r.entrada_2 || "-"}</TableCell>
-                          <TableCell>{r.saida_2 || "-"}</TableCell>
-                          <TableCell>{r.entrada_3 || "-"}</TableCell>
-                          <TableCell>{r.saida_3 || "-"}</TableCell>
-                          <TableCell>
-                            {r.duracao ? <Badge variant="secondary">{r.duracao}</Badge> : "-"}
-                          </TableCell>
-                          <TableCell>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeletePonto(r.id)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+              {loadingPonto ? <Loader2 className="h-6 w-6 animate-spin mx-auto" /> : pontoAgrupado.length === 0 ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  Nenhum registro de ponto importado ainda.
                 </div>
+              ) : (
+                <Tabs value={selectedFuncionarioPonto} onValueChange={setSelectedFuncionarioPonto} className="space-y-4">
+                  <div className="overflow-x-auto pb-2">
+                    <TabsList className="h-auto min-w-max">
+                      {pontoAgrupado.map((grupo) => (
+                        <TabsTrigger key={grupo.cpf} value={grupo.cpf} className="flex min-w-[180px] flex-col items-start gap-0.5 px-4 py-2 text-left">
+                          <span className="max-w-full truncate font-medium">{grupo.nome}</span>
+                          <span className="text-xs text-muted-foreground">{grupo.meses.length} mês(es) • {grupo.registros.length} dia(s)</span>
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </div>
+
+                  {pontoAgrupado.map((grupo) => (
+                    <TabsContent key={grupo.cpf} value={grupo.cpf} className="space-y-4">
+                      <div className="rounded-lg border bg-muted/30 p-4">
+                        <div className="font-medium">{grupo.nome}</div>
+                        <div className="text-sm text-muted-foreground">CPF {grupo.cpf} • {grupo.meses.length} competência(s) importada(s)</div>
+                      </div>
+
+                      <Tabs defaultValue={grupo.meses[0]?.key} className="space-y-4">
+                        <div className="overflow-x-auto pb-2">
+                          <TabsList className="min-w-max">
+                            {grupo.meses.map((mes) => (
+                              <TabsTrigger key={mes.key} value={mes.key}>{mes.label}</TabsTrigger>
+                            ))}
+                          </TabsList>
+                        </div>
+
+                        {grupo.meses.map((mes) => {
+                          const visibleIds = mes.registros.map((registro) => registro.id);
+                          const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedPonto.has(id));
+
+                          return (
+                            <TabsContent key={mes.key} value={mes.key}>
+                              <div className="overflow-auto rounded-md border">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead className="w-10">
+                                        <Checkbox
+                                          checked={allVisibleSelected}
+                                          onCheckedChange={() => toggleAllPonto(visibleIds)}
+                                        />
+                                      </TableHead>
+                                      <TableHead>Data</TableHead>
+                                      <TableHead>Ent. 1</TableHead>
+                                      <TableHead>Saí. 1</TableHead>
+                                      <TableHead>Ent. 2</TableHead>
+                                      <TableHead>Saí. 2</TableHead>
+                                      <TableHead>Ent. 3</TableHead>
+                                      <TableHead>Saí. 3</TableHead>
+                                      <TableHead>Duração</TableHead>
+                                      <TableHead>Ocorr.</TableHead>
+                                      <TableHead>Motivo</TableHead>
+                                      <TableHead></TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {mes.registros.map((r: any) => (
+                                      <TableRow key={r.id} className={selectedPonto.has(r.id) ? "bg-muted/50" : ""}>
+                                        <TableCell>
+                                          <Checkbox
+                                            checked={selectedPonto.has(r.id)}
+                                            onCheckedChange={() => togglePontoSelection(r.id)}
+                                          />
+                                        </TableCell>
+                                        <TableCell>{formatDateBr(String(r.data))}</TableCell>
+                                        <TableCell>{r.entrada_1 || "-"}</TableCell>
+                                        <TableCell>{r.saida_1 || "-"}</TableCell>
+                                        <TableCell>{r.entrada_2 || "-"}</TableCell>
+                                        <TableCell>{r.saida_2 || "-"}</TableCell>
+                                        <TableCell>{r.entrada_3 || "-"}</TableCell>
+                                        <TableCell>{r.saida_3 || "-"}</TableCell>
+                                        <TableCell>{r.duracao ? <Badge variant="secondary">{r.duracao}</Badge> : "-"}</TableCell>
+                                        <TableCell>{r.ocorrencia || "-"}</TableCell>
+                                        <TableCell>{r.motivo || "-"}</TableCell>
+                                        <TableCell>
+                                          <Button variant="ghost" size="icon" onClick={() => handleDeletePonto(r.id)}>
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                          </Button>
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </TabsContent>
+                          );
+                        })}
+                      </Tabs>
+                    </TabsContent>
+                  ))}
+                </Tabs>
               )}
             </CardContent>
           </Card>
