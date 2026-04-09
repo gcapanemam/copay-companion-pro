@@ -269,8 +269,7 @@ export function AdminFaltas() {
     setImporting(true);
     setImportLog([]);
     try {
-      const text = await extractTextFromPdf(file);
-      const records = parseEspelhoPonto(text);
+      const records = await parsePontoPdf(file);
 
       if (records.length === 0) {
         toast({ title: "Nenhum registro encontrado no PDF", variant: "destructive" });
