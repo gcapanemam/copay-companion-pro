@@ -279,8 +279,6 @@ const MinhaArea = () => {
               departamento={admissao?.departamento}
             />
           </TabsContent>
-            <PortalFaltas faltas={faltas} registrosPonto={registrosPonto} />
-          </TabsContent>
         </Tabs>
       </main>
     </div>
