@@ -163,6 +163,7 @@ export function AdminFuncionarios() {
                     <TableHead>CPF</TableHead>
                     <TableHead>Função</TableHead>
                     <TableHead>Unidade</TableHead>
+                    <TableHead>Departamento</TableHead>
                     <TableHead>Origem</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -181,6 +182,7 @@ export function AdminFuncionarios() {
                         <TableCell>{formatCpf(f.cpf)}</TableCell>
                         <TableCell>{f.dados?.funcao || f.admissao?.funcao || "-"}</TableCell>
                         <TableCell>{f.dados?.unidade || f.admissao?.unidade || "-"}</TableCell>
+                        <TableCell>{f.dados?.departamento || f.admissao?.departamento || "-"}</TableCell>
                         <TableCell>
                           <Badge variant={f.origem === "Ambos" ? "default" : "secondary"}>{f.origem}</Badge>
                         </TableCell>
