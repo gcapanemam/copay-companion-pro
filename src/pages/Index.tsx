@@ -2,7 +2,7 @@ import { useState } from "react";
 import { UploadArea } from "@/components/UploadArea";
 import { TabelaAnual } from "@/components/TabelaAnual";
 import { SeletorAno } from "@/components/SeletorAno";
-import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX, ClipboardList, Users, Megaphone } from "lucide-react";
+import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX, ClipboardList, Users, Megaphone, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -19,6 +19,7 @@ import { AdminFaltas } from "@/components/admin/AdminFaltas";
 import { AdminAdmissaoCampos } from "@/components/admin/AdminAdmissaoCampos";
 import { AdminFuncionarios } from "@/components/admin/AdminFuncionarios";
 import { AdminComunicados } from "@/components/admin/AdminComunicados";
+import { ChatContainer } from "@/components/chat/ChatContainer";
 
 const Index = () => {
   const [ano, setAno] = useState(2025);
@@ -66,7 +67,7 @@ const Index = () => {
 
       <main className="container mx-auto px-4 py-6">
         <Tabs defaultValue="plano" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8">
+          <TabsList className="grid w-full grid-cols-9">
             <TabsTrigger value="plano" className="flex items-center gap-1">
               <Heart className="h-4 w-4" />Plano
             </TabsTrigger>
@@ -80,13 +81,16 @@ const Index = () => {
               <ShieldCheck className="h-4 w-4" />EPIs
             </TabsTrigger>
             <TabsTrigger value="vt" className="flex items-center gap-1">
-              <Bus className="h-4 w-4" />Vale-Transporte
+              <Bus className="h-4 w-4" />VT
             </TabsTrigger>
             <TabsTrigger value="faltas" className="flex items-center gap-1">
-              <CalendarX className="h-4 w-4" />Ponto e Faltas
+              <CalendarX className="h-4 w-4" />Ponto
             </TabsTrigger>
             <TabsTrigger value="comunicados" className="flex items-center gap-1">
               <Megaphone className="h-4 w-4" />Comunicados
+            </TabsTrigger>
+            <TabsTrigger value="chat" className="flex items-center gap-1">
+              <MessageCircle className="h-4 w-4" />Chat
             </TabsTrigger>
             <TabsTrigger value="admissao" className="flex items-center gap-1">
               <ClipboardList className="h-4 w-4" />Admissão
@@ -144,6 +148,14 @@ const Index = () => {
 
           <TabsContent value="comunicados">
             <AdminComunicados />
+          </TabsContent>
+
+          <TabsContent value="chat">
+            <ChatContainer meuCpf="admin" />
+          </TabsContent>
+
+          <TabsContent value="admissao">
+            <AdminAdmissaoCampos />
           </TabsContent>
 
           <TabsContent value="admissao">
