@@ -14,31 +14,6 @@ function getInitials(name: string) {
   return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 }
 
-function FichaSection({ icon: Icon, title, children }: { icon: any; title: string; children: React.ReactNode }) {
-  return (
-    <div className="border rounded-lg p-4 space-y-2">
-      <div className="flex items-center gap-2 mb-2">
-        <Icon className="h-4 w-4 text-primary" />
-        <h3 className="font-semibold text-sm text-muted-foreground">{title}</h3>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-sm">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function FichaField({ label, value }: { label: string; value: any }) {
-  if (!value && value !== false) return null;
-  const display = typeof value === "boolean" ? (value ? "Sim" : "Não") : String(value);
-  return (
-    <div className="py-0.5">
-      <span className="font-medium text-muted-foreground">{label}:</span>{" "}
-      <span>{display}</span>
-    </div>
-  );
-}
-
 export function AdminFuncionarios() {
   const [filtroUnidade, setFiltroUnidade] = useState("__all__");
   const [filtroDepartamento, setFiltroDepartamento] = useState("__all__");
