@@ -171,6 +171,8 @@ export function AdminFaltas() {
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importLog, setImportLog] = useState<string[]>([]);
+  const [selectedPonto, setSelectedPonto] = useState<Set<string>>(new Set());
+  const [deletingPonto, setDeletingPonto] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
