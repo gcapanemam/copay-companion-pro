@@ -1,0 +1,1 @@
+ALTER TABLE public.admissoes ADD COLUMN departamento text DEFAULT NULL;
