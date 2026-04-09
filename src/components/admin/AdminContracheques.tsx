@@ -43,6 +43,8 @@ export function AdminContracheques() {
   const [bulkUploading, setBulkUploading] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
   const [bulkResults, setBulkResults] = useState<BulkResult[]>([]);
+  const [viewingUrl, setViewingUrl] = useState<string | null>(null);
+  const [viewingName, setViewingName] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
