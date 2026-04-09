@@ -85,6 +85,9 @@ const Index = () => {
             <TabsTrigger value="faltas" className="flex items-center gap-1">
               <CalendarX className="h-4 w-4" />Ponto e Faltas
             </TabsTrigger>
+            <TabsTrigger value="comunicados" className="flex items-center gap-1">
+              <Megaphone className="h-4 w-4" />Comunicados
+            </TabsTrigger>
             <TabsTrigger value="admissao" className="flex items-center gap-1">
               <ClipboardList className="h-4 w-4" />Admissão
             </TabsTrigger>
@@ -137,6 +140,10 @@ const Index = () => {
 
           <TabsContent value="faltas">
             <AdminFaltas />
+          </TabsContent>
+
+          <TabsContent value="comunicados">
+            <AdminComunicados />
           </TabsContent>
 
           <TabsContent value="admissao">
