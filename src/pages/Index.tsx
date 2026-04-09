@@ -82,7 +82,7 @@ const Index = () => {
               <Bus className="h-4 w-4" />Vale-Transporte
             </TabsTrigger>
             <TabsTrigger value="faltas" className="flex items-center gap-1">
-              <CalendarX className="h-4 w-4" />Faltas
+              <CalendarX className="h-4 w-4" />Ponto e Faltas
             </TabsTrigger>
             <TabsTrigger value="admissao" className="flex items-center gap-1">
               <ClipboardList className="h-4 w-4" />Admissão
