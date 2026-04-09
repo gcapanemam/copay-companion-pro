@@ -19,9 +19,6 @@ export function AdminFuncionarios() {
   const [filtroDepartamento, setFiltroDepartamento] = useState("__all__");
   const [busca, setBusca] = useState("");
   const [selected, setSelected] = useState<any>(null);
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const queryClient = useQueryClient();
 
   const { data: admissoes, isLoading: loadingAdmissoes } = useQuery({
     queryKey: ["admin-admissoes-func"],
@@ -93,32 +90,6 @@ export function AdminFuncionarios() {
     return data?.publicUrl || null;
   };
 
-  const handleFotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selected) return;
-    setUploading(true);
-    try {
-      const path = `${selected.cpf}.${file.name.split(".").pop()}`;
-      const { error: upErr } = await supabase.storage.from("funcionarios-fotos").upload(path, file, { upsert: true });
-      if (upErr) throw upErr;
-      if (selected.admissao?.id) {
-        await supabase.from("admissoes").update({ foto_url: path } as any).eq("id", selected.admissao.id);
-      }
-      toast.success("Foto atualizada!");
-      queryClient.invalidateQueries({ queryKey: ["admin-admissoes-func"] });
-      setSelected((prev: any) => prev ? { ...prev, admissao: { ...prev.admissao, foto_url: path } } : prev);
-    } catch (err: any) {
-      toast.error("Erro ao enviar foto: " + err.message);
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  };
-
-  const d = selected?.dados || {};
-  const a = selected?.admissao || {};
-  const g = (key: string) => d[key] || a[key] || "";
-
   return (
     <div className="space-y-6">
       <Card>
@@ -132,24 +103,20 @@ export function AdminFuncionarios() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Buscar nome ou CPF..." value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-9" />
             </div>
-            {unidades.length > 0 && (
-              <Select value={filtroUnidade} onValueChange={setFiltroUnidade}>
-                <SelectTrigger className="w-44"><SelectValue placeholder="Unidade" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Todas Unidades</SelectItem>
-                  {unidades.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            )}
-            {departamentos.length > 0 && (
-              <Select value={filtroDepartamento} onValueChange={setFiltroDepartamento}>
-                <SelectTrigger className="w-48"><SelectValue placeholder="Departamento" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">Todos Departamentos</SelectItem>
-                  {departamentos.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            )}
+            <Select value={filtroUnidade} onValueChange={setFiltroUnidade}>
+              <SelectTrigger className="w-44"><SelectValue placeholder="Unidade" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todas Unidades</SelectItem>
+                {unidades.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filtroDepartamento} onValueChange={setFiltroDepartamento}>
+              <SelectTrigger className="w-48"><SelectValue placeholder="Departamento" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todos Departamentos</SelectItem>
+                {departamentos.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         <CardContent>
@@ -200,96 +167,11 @@ export function AdminFuncionarios() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-auto">
-          <DialogHeader>
-            <DialogTitle>Ficha Funcional</DialogTitle>
-          </DialogHeader>
-          {selected && (
-            <div className="space-y-4">
-              {/* Header com foto */}
-              <div className="flex gap-5 items-start border rounded-lg p-4 bg-muted/30">
-                <div className="relative group shrink-0">
-                  <Avatar className="h-28 w-28">
-                    {getFotoUrl(selected) && <AvatarImage src={getFotoUrl(selected)!} />}
-                    <AvatarFallback className="text-2xl">{getInitials(selected.nome)}</AvatarFallback>
-                  </Avatar>
-                  <button
-                    className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                    onClick={() => fileRef.current?.click()}
-                    disabled={uploading}
-                  >
-                    {uploading ? <Loader2 className="h-5 w-5 animate-spin text-white" /> : <Camera className="h-5 w-5 text-white" />}
-                  </button>
-                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFotoUpload} />
-                </div>
-                <div className="space-y-1">
-                  <h2 className="text-xl font-bold">{selected.nome}</h2>
-                  <p className="text-sm text-muted-foreground">CPF: {formatCpf(selected.cpf)}</p>
-                  {g("funcao") && <p className="text-sm">Função: {g("funcao")}</p>}
-                  {g("unidade") && <p className="text-sm">Unidade: {g("unidade")}</p>}
-                  {g("departamento") && <p className="text-sm">Departamento: {g("departamento")}</p>}
-                  <Badge variant={selected.origem === "Ambos" ? "default" : "secondary"}>{selected.origem}</Badge>
-                </div>
-              </div>
-
-              <FichaSection icon={User} title="Dados Pessoais">
-                <FichaField label="Data de Nascimento" value={g("data_nascimento")} />
-                <FichaField label="RG" value={g("rg")} />
-                <FichaField label="Expedição RG" value={g("data_expedicao_rg")} />
-                <FichaField label="Sexo" value={g("sexo")} />
-                <FichaField label="Cor" value={g("cor")} />
-                <FichaField label="Estado Civil" value={g("estado_civil")} />
-                <FichaField label="Escolaridade" value={g("escolaridade")} />
-                <FichaField label="Local de Nascimento" value={g("local_nascimento")} />
-              </FichaSection>
-
-              <FichaSection icon={FileText} title="Documentos">
-                <FichaField label="Nº PIS" value={g("numero_pis")} />
-                <FichaField label="Cadastro PIS" value={g("data_cadastro_pis")} />
-                <FichaField label="Nº CTPS" value={g("numero_ctps")} />
-                <FichaField label="Série CTPS" value={g("serie_ctps")} />
-                <FichaField label="Emissão CTPS" value={g("emissao_ctps")} />
-                <FichaField label="Título de Eleitor" value={g("titulo_eleitor")} />
-              </FichaSection>
-
-              <FichaSection icon={MapPin} title="Endereço">
-                <FichaField label="Endereço" value={g("endereco")} />
-                <FichaField label="Bairro" value={g("bairro")} />
-                <FichaField label="CEP" value={g("cep")} />
-              </FichaSection>
-
-              <FichaSection icon={Heart} title="Família">
-                <FichaField label="Nome da Mãe" value={g("nome_mae")} />
-                <FichaField label="Nome do Pai" value={g("nome_pai")} />
-                <FichaField label="Cônjuge" value={g("nome_conjuge")} />
-                <FichaField label="CPF Cônjuge" value={g("cpf_conjuge")} />
-                <FichaField label="Dependentes IR" value={g("dependentes_ir")} />
-                <FichaField label="CPF Dependentes" value={g("cpf_dependentes")} />
-              </FichaSection>
-
-              <FichaSection icon={Briefcase} title="Profissional">
-                <FichaField label="1º Dia de Trabalho" value={g("primeiro_dia_trabalho")} />
-                <FichaField label="Horário de Trabalho" value={g("horario_trabalho")} />
-                <FichaField label="Primeiro Emprego" value={g("primeiro_emprego")} />
-                <FichaField label="Vale Transporte" value={g("vale_transporte")} />
-                <FichaField label="Detalhes VT" value={g("detalhes_vale_transporte")} />
-                <FichaField label="Dados Bancários" value={g("dados_bancarios")} />
-              </FichaSection>
-
-              <FichaSection icon={Phone} title="Contato">
-                <FichaField label="Telefone" value={g("telefone")} />
-                <FichaField label="E-mail" value={g("email")} />
-              </FichaSection>
-
-              <FichaSection icon={Stethoscope} title="Plano de Saúde">
-                <FichaField label="Interesse" value={g("interesse_plano")} />
-                <FichaField label="Plano Escolhido" value={g("plano_escolhido")} />
-              </FichaSection>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <FichaFuncionalDialog
+        funcionario={selected}
+        open={!!selected}
+        onClose={() => setSelected(null)}
+      />
     </div>
   );
 }
