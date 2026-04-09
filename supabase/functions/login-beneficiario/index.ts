@@ -117,13 +117,30 @@ Deno.serve(async (req) => {
         coparticipacoes = coparts || [];
       }
 
-      // Fetch new modules data
+      // Fetch modules data
       const { data: contracheques } = await supabase.from("contracheques").select("*").eq("cpf", cleanCpf).eq("ano", selectedAno).order("mes");
       const { data: epis } = await supabase.from("epis").select("*").eq("cpf", cleanCpf).order("data_entrega", { ascending: false });
       const { data: valeTransporte } = await supabase.from("vale_transporte").select("*").eq("cpf", cleanCpf).eq("ano", selectedAno).order("mes");
       const { data: faltas } = await supabase.from("faltas").select("*").eq("cpf", cleanCpf).order("data_falta", { ascending: false });
       const { data: registrosPonto } = await supabase.from("registros_ponto").select("*").eq("cpf", cleanCpf).order("data", { ascending: false });
       const { data: admissao } = await supabase.from("admissoes").select("*").eq("cpf", cleanCpf).maybeSingle();
+
+      // Fetch comunicados for this user
+      const userUnidade = admissao?.unidade || null;
+      const userDepartamento = admissao?.departamento || null;
+
+      // Get all comunicados then filter
+      const { data: allComunicados } = await supabase.from("comunicados").select("*").order("created_at", { ascending: false });
+      const { data: destinatariosSelecionados } = await supabase.from("comunicado_destinatarios").select("comunicado_id, cpf").eq("cpf", cleanCpf);
+      const selecionadosIds = new Set((destinatariosSelecionados || []).map(d => d.comunicado_id));
+
+      const comunicados = (allComunicados || []).filter(c => {
+        if (c.tipo_destinatario === "todos") return true;
+        if (c.tipo_destinatario === "unidade" && c.valor_destinatario === userUnidade) return true;
+        if (c.tipo_destinatario === "departamento" && c.valor_destinatario === userDepartamento) return true;
+        if (c.tipo_destinatario === "selecionados" && selecionadosIds.has(c.id)) return true;
+        return false;
+      });
 
       return jsonResponse({
         success: true,
@@ -138,6 +155,7 @@ Deno.serve(async (req) => {
         faltas: faltas || [],
         registros_ponto: registrosPonto || [],
         admissao: admissao || null,
+        comunicados,
       });
     }
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Activity, LogOut, Printer, Heart, FileText, ShieldCheck, Bus, CalendarX, User } from "lucide-react";
+import { Activity, LogOut, Printer, Heart, FileText, ShieldCheck, Bus, CalendarX, User, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ import { PortalEPIs } from "@/components/portal/PortalEPIs";
 import { PortalValeTransporte } from "@/components/portal/PortalValeTransporte";
 import { PortalFaltas } from "@/components/portal/PortalFaltas";
 import { PortalMeusDados } from "@/components/portal/PortalMeusDados";
+import { PortalComunicados } from "@/components/portal/PortalComunicados";
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const HAPVIDA_CNPJ = "63.554.067/0001-98";
@@ -33,6 +34,7 @@ const MinhaArea = () => {
   const [mensalidades, setMensalidades] = useState<Mensalidade[]>([]);
   const [coparticipacoes, setCoparticipacoes] = useState<Coparticipacao[]>([]);
   const [contracheques, setContracheques] = useState<any[]>([]);
+  const [comunicados, setComunicados] = useState<any[]>([]);
   const [epis, setEpis] = useState<any[]>([]);
   const [valeTransporte, setValeTransporte] = useState<any[]>([]);
   const [faltas, setFaltas] = useState<any[]>([]);
@@ -65,6 +67,7 @@ const MinhaArea = () => {
       setMensalidades(data.mensalidades || []);
       setCoparticipacoes(data.coparticipacoes || []);
       setContracheques(data.contracheques || []);
+      setComunicados(data.comunicados || []);
       setEpis(data.epis || []);
       setValeTransporte(data.vale_transporte || []);
       setFaltas(data.faltas || []);
@@ -89,6 +92,7 @@ const MinhaArea = () => {
         setMensalidades(data.mensalidades || []);
         setCoparticipacoes(data.coparticipacoes || []);
         setContracheques(data.contracheques || []);
+        setComunicados(data.comunicados || []);
         setEpis(data.epis || []);
         setValeTransporte(data.vale_transporte || []);
         setFaltas(data.faltas || []);
@@ -193,13 +197,14 @@ const MinhaArea = () => {
 
       <main className="container mx-auto px-4 py-6">
         <Tabs defaultValue="dados" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="dados" className="flex items-center gap-1"><User className="h-4 w-4" />Meus Dados</TabsTrigger>
             <TabsTrigger value="plano" className="flex items-center gap-1"><Heart className="h-4 w-4" />Plano de Saúde</TabsTrigger>
             <TabsTrigger value="contracheques" className="flex items-center gap-1"><FileText className="h-4 w-4" />Contracheques</TabsTrigger>
             <TabsTrigger value="epis" className="flex items-center gap-1"><ShieldCheck className="h-4 w-4" />EPIs</TabsTrigger>
             <TabsTrigger value="vt" className="flex items-center gap-1"><Bus className="h-4 w-4" />Vale-Transporte</TabsTrigger>
             <TabsTrigger value="faltas" className="flex items-center gap-1"><CalendarX className="h-4 w-4" />Ponto e Faltas</TabsTrigger>
+            <TabsTrigger value="comunicados" className="flex items-center gap-1"><Megaphone className="h-4 w-4" />Comunicados</TabsTrigger>
           </TabsList>
 
           <TabsContent value="dados">
@@ -264,6 +269,15 @@ const MinhaArea = () => {
 
           <TabsContent value="faltas">
             <PortalFaltas faltas={faltas} registrosPonto={registrosPonto} />
+          </TabsContent>
+
+          <TabsContent value="comunicados">
+            <PortalComunicados
+              comunicados={comunicados}
+              cpf={userCpf}
+              unidade={admissao?.unidade}
+              departamento={admissao?.departamento}
+            />
           </TabsContent>
         </Tabs>
       </main>

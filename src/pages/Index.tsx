@@ -2,7 +2,7 @@ import { useState } from "react";
 import { UploadArea } from "@/components/UploadArea";
 import { TabelaAnual } from "@/components/TabelaAnual";
 import { SeletorAno } from "@/components/SeletorAno";
-import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX, ClipboardList, Users } from "lucide-react";
+import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX, ClipboardList, Users, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +18,7 @@ import { AdminValeTransporte } from "@/components/admin/AdminValeTransporte";
 import { AdminFaltas } from "@/components/admin/AdminFaltas";
 import { AdminAdmissaoCampos } from "@/components/admin/AdminAdmissaoCampos";
 import { AdminFuncionarios } from "@/components/admin/AdminFuncionarios";
+import { AdminComunicados } from "@/components/admin/AdminComunicados";
 
 const Index = () => {
   const [ano, setAno] = useState(2025);
@@ -65,7 +66,7 @@ const Index = () => {
 
       <main className="container mx-auto px-4 py-6">
         <Tabs defaultValue="plano" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="plano" className="flex items-center gap-1">
               <Heart className="h-4 w-4" />Plano
             </TabsTrigger>
@@ -83,6 +84,9 @@ const Index = () => {
             </TabsTrigger>
             <TabsTrigger value="faltas" className="flex items-center gap-1">
               <CalendarX className="h-4 w-4" />Ponto e Faltas
+            </TabsTrigger>
+            <TabsTrigger value="comunicados" className="flex items-center gap-1">
+              <Megaphone className="h-4 w-4" />Comunicados
             </TabsTrigger>
             <TabsTrigger value="admissao" className="flex items-center gap-1">
               <ClipboardList className="h-4 w-4" />Admissão
@@ -136,6 +140,10 @@ const Index = () => {
 
           <TabsContent value="faltas">
             <AdminFaltas />
+          </TabsContent>
+
+          <TabsContent value="comunicados">
+            <AdminComunicados />
           </TabsContent>
 
           <TabsContent value="admissao">
