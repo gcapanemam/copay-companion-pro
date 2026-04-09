@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -41,6 +42,8 @@ function FichaField({ label, value }: { label: string; value: any }) {
 }
 
 export function AdminFuncionarios() {
+  const [filtroUnidade, setFiltroUnidade] = useState("__all__");
+  const [filtroDepartamento, setFiltroDepartamento] = useState("__all__");
   const [busca, setBusca] = useState("");
   const [selected, setSelected] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
@@ -97,9 +100,17 @@ export function AdminFuncionarios() {
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   })();
 
+  const unidades = [...new Set(funcionarios.map(f => f.dados?.unidade || f.admissao?.unidade || "").filter(Boolean))].sort();
+  const departamentos = [...new Set(funcionarios.map(f => f.dados?.departamento || f.admissao?.departamento || "").filter(Boolean))].sort();
+
   const filtered = funcionarios.filter((f) => {
     const term = busca.toLowerCase();
-    return f.nome.toLowerCase().includes(term) || f.cpf.includes(busca.replace(/\D/g, ""));
+    const matchNome = f.nome.toLowerCase().includes(term) || f.cpf.includes(busca.replace(/\D/g, ""));
+    const uni = f.dados?.unidade || f.admissao?.unidade || "";
+    const dep = f.dados?.departamento || f.admissao?.departamento || "";
+    const matchUnidade = filtroUnidade === "__all__" || uni === filtroUnidade;
+    const matchDep = filtroDepartamento === "__all__" || dep === filtroDepartamento;
+    return matchNome && matchUnidade && matchDep;
   });
 
   const getFotoUrl = (f: any) => {
@@ -143,9 +154,29 @@ export function AdminFuncionarios() {
             <Users className="h-5 w-5 text-primary" />
             <CardTitle>Funcionários ({filtered.length})</CardTitle>
           </div>
-          <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar por nome ou CPF..." value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-9" />
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative w-56">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Buscar nome ou CPF..." value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-9" />
+            </div>
+            {unidades.length > 0 && (
+              <Select value={filtroUnidade} onValueChange={setFiltroUnidade}>
+                <SelectTrigger className="w-44"><SelectValue placeholder="Unidade" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Todas Unidades</SelectItem>
+                  {unidades.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+            {departamentos.length > 0 && (
+              <Select value={filtroDepartamento} onValueChange={setFiltroDepartamento}>
+                <SelectTrigger className="w-48"><SelectValue placeholder="Departamento" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Todos Departamentos</SelectItem>
+                  {departamentos.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </CardHeader>
         <CardContent>
