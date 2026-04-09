@@ -178,6 +178,12 @@ export function AdminFuncionarios() {
               </Select>
             )}
           </div>
+        </CardHeader>
+        <CardContent>
+          {(loadingAdmissoes || loadingTitulares) ? (
+            <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+          ) : !filtered.length ? (
+            <p className="text-muted-foreground text-center py-4">Nenhum funcionário encontrado.</p>
           ) : (
             <div className="max-h-[500px] overflow-auto">
               <Table>
