@@ -100,9 +100,17 @@ export function AdminFuncionarios() {
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   })();
 
+  const unidades = [...new Set(funcionarios.map(f => f.dados?.unidade || f.admissao?.unidade || "").filter(Boolean))].sort();
+  const departamentos = [...new Set(funcionarios.map(f => f.dados?.departamento || f.admissao?.departamento || "").filter(Boolean))].sort();
+
   const filtered = funcionarios.filter((f) => {
     const term = busca.toLowerCase();
-    return f.nome.toLowerCase().includes(term) || f.cpf.includes(busca.replace(/\D/g, ""));
+    const matchNome = f.nome.toLowerCase().includes(term) || f.cpf.includes(busca.replace(/\D/g, ""));
+    const uni = f.dados?.unidade || f.admissao?.unidade || "";
+    const dep = f.dados?.departamento || f.admissao?.departamento || "";
+    const matchUnidade = filtroUnidade === "__all__" || uni === filtroUnidade;
+    const matchDep = filtroDepartamento === "__all__" || dep === filtroDepartamento;
+    return matchNome && matchUnidade && matchDep;
   });
 
   const getFotoUrl = (f: any) => {
