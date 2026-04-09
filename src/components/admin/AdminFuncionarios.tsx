@@ -42,6 +42,8 @@ function FichaField({ label, value }: { label: string; value: any }) {
 }
 
 export function AdminFuncionarios() {
+  const [filtroUnidade, setFiltroUnidade] = useState("__all__");
+  const [filtroDepartamento, setFiltroDepartamento] = useState("__all__");
   const [busca, setBusca] = useState("");
   const [selected, setSelected] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
