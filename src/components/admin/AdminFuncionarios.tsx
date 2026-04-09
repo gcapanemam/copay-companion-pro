@@ -154,16 +154,30 @@ export function AdminFuncionarios() {
             <Users className="h-5 w-5 text-primary" />
             <CardTitle>Funcionários ({filtered.length})</CardTitle>
           </div>
-          <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar por nome ou CPF..." value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-9" />
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative w-56">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Buscar nome ou CPF..." value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-9" />
+            </div>
+            {unidades.length > 0 && (
+              <Select value={filtroUnidade} onValueChange={setFiltroUnidade}>
+                <SelectTrigger className="w-44"><SelectValue placeholder="Unidade" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Todas Unidades</SelectItem>
+                  {unidades.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+            {departamentos.length > 0 && (
+              <Select value={filtroDepartamento} onValueChange={setFiltroDepartamento}>
+                <SelectTrigger className="w-48"><SelectValue placeholder="Departamento" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Todos Departamentos</SelectItem>
+                  {departamentos.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
           </div>
-        </CardHeader>
-        <CardContent>
-          {(loadingAdmissoes || loadingTitulares) ? (
-            <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-          ) : !filtered.length ? (
-            <p className="text-muted-foreground text-center py-4">Nenhum funcionário encontrado.</p>
           ) : (
             <div className="max-h-[500px] overflow-auto">
               <Table>
