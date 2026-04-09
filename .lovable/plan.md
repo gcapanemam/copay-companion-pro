@@ -1,62 +1,21 @@
 
 
-# Melhorar Layout de Funcionários com Foto
+## Área do Funcionário — Plano
 
-## Resumo
+O portal do funcionário já existe em `/minha-area` com as abas de Plano de Saúde, Contracheques, EPIs, Vale-Transporte e Ponto/Faltas. O que falta é:
 
-Redesenhar o dialog de detalhes do funcionário com um layout tipo "ficha funcional" organizado por seções, com suporte a foto do funcionário (upload e exibição). Adicionar coluna `foto_url` na tabela `admissoes` e usar o storage para armazenar as fotos.
+1. **Adicionar aba "Meus Dados"** — exibir informações pessoais/profissionais do funcionário (nome, CPF, cargo, unidade, departamento, etc.) consultando a tabela `admissoes` pelo CPF.
 
-## Mudanças
+2. **Atualizar a edge function `login-beneficiario`** — no action `login`, buscar também os dados da tabela `admissoes` pelo CPF e retorná-los na resposta.
 
-### 1. Banco de Dados
-- Adicionar coluna `foto_url TEXT` na tabela `admissoes` para armazenar o caminho da foto no storage
-- Criar bucket `funcionarios-fotos` no storage (público para leitura)
+3. **Criar componente `PortalMeusDados`** — exibir os campos da admissão (dados pessoais, endereço, dados bancários, função, unidade, departamento, foto) de forma somente-leitura.
 
-### 2. Layout do Dialog (AdminFuncionarios.tsx)
-Redesenhar o dialog de detalhes para um layout de "ficha funcional":
+4. **Melhorar visibilidade do portal** — adicionar link visível para `/minha-area` na tela de login administrativo.
 
-```text
-┌──────────────────────────────────────────────┐
-│  [FOTO]   Nome Completo                      │
-│  avatar   CPF: xxx.xxx.xxx-xx                │
-│  120px    Função: Serviços Gerais            │
-│           Unidade: Santo Agostinho           │
-│           Badge: Admissão / Plano / Ambos    │
-├──────────────────────────────────────────────┤
-│  📋 Dados Pessoais                           │
-│  RG | Data Nasc | Sexo | Cor | Estado Civil  │
-│  Escolaridade | Local Nascimento             │
-├──────────────────────────────────────────────┤
-│  📄 Documentos                               │
-│  PIS | CTPS | Série | Emissão | Título       │
-├──────────────────────────────────────────────┤
-│  📍 Endereço                                 │
-│  Endereço | Bairro | CEP                     │
-├──────────────────────────────────────────────┤
-│  👨‍👩‍👧 Família                                  │
-│  Mãe | Pai | Cônjuge | Dependentes           │
-├──────────────────────────────────────────────┤
-│  💼 Profissional                             │
-│  Horário | 1º Emprego | VT | Dados Bancários │
-├──────────────────────────────────────────────┤
-│  📞 Contato                                  │
-│  Telefone | E-mail                           │
-├──────────────────────────────────────────────┤
-│  🏥 Plano de Saúde                           │
-│  Interesse | Plano Escolhido                 │
-└──────────────────────────────────────────────┘
-```
+### Detalhes técnicos
 
-### 3. Upload de Foto
-- Botão de upload na área da foto no dialog
-- Upload para bucket `funcionarios-fotos` com path `{cpf}.jpg`
-- Salvar URL no campo `foto_url` da admissão
-- Avatar com iniciais como fallback quando não há foto
-
-### 4. Tabela principal
-- Adicionar coluna com avatar/foto miniatura na lista de funcionários
-
-### Arquivos modificados
-- `src/components/admin/AdminFuncionarios.tsx` — redesign completo
-- Migration SQL — coluna `foto_url` + bucket storage
+- **Edge function**: adicionar query `supabase.from("admissoes").select("*").eq("cpf", cleanCpf).maybeSingle()` e retornar `admissao` no response do login.
+- **PortalMeusDados.tsx**: componente read-only que renderiza campos como nome, CPF, função, unidade, departamento, endereço, dados bancários, foto, e quaisquer campos dinâmicos do JSON `dados`.
+- **MinhaArea.tsx**: adicionar nova aba "Meus Dados" com ícone `User` como primeira aba, e state `admissao` para armazenar os dados.
+- Nenhuma alteração de banco de dados necessária — a tabela `admissoes` já tem todos os campos.
 
