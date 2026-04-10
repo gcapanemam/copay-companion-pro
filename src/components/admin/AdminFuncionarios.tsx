@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Search, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, Search, Users, Eye } from "lucide-react";
 import { FichaFuncionalDialog } from "./FichaFuncionalDialog";
 
 function getInitials(name: string) {
