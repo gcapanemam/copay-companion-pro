@@ -224,6 +224,11 @@ const MinhaArea = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {isAdminView && (
+        <div className="bg-primary text-primary-foreground text-center py-1 text-sm font-medium">
+          👁️ Visualizando como: {nome} ({formatCpf(userCpf)}) — <button className="underline" onClick={() => window.close()}>Fechar</button>
+        </div>
+      )}
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -235,9 +240,11 @@ const MinhaArea = () => {
             <select className="border rounded px-2 py-1 text-sm bg-background" value={ano} onChange={(e) => handleAnoChange(Number(e.target.value))}>
               {[2024, 2025, 2026].map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
-            <Button variant="ghost" size="sm" onClick={() => { setLoggedIn(false); setSenha(""); }}>
-              <LogOut className="h-4 w-4 mr-1" />Sair
-            </Button>
+            {!isAdminView && (
+              <Button variant="ghost" size="sm" onClick={() => { setLoggedIn(false); setSenha(""); }}>
+                <LogOut className="h-4 w-4 mr-1" />Sair
+              </Button>
+            )}
           </div>
         </div>
       </header>
