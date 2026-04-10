@@ -26,10 +26,12 @@ interface CopartItem { procedimento: string; local: string | null; quantidade: n
 interface Coparticipacao { mes: number; data_utilizacao: string | null; coparticipacao_itens: CopartItem[]; }
 
 const MinhaArea = () => {
+  const [searchParams] = useSearchParams();
   const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [isAdminView, setIsAdminView] = useState(false);
   const [nome, setNome] = useState("");
   const [userCpf, setUserCpf] = useState("");
   const [ano, setAno] = useState(new Date().getFullYear());
@@ -44,6 +46,49 @@ const MinhaArea = () => {
   const [admissao, setAdmissao] = useState<any>(null);
   const [showIR, setShowIR] = useState(false);
   const { toast } = useToast();
+
+  // Admin impersonation: auto-login when admin_cpf is in URL
+  useEffect(() => {
+    const adminCpf = searchParams.get("admin_cpf");
+    if (adminCpf && !loggedIn) {
+      const doAdminLogin = async () => {
+        setLoading(true);
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) {
+            toast({ title: "Erro", description: "Você precisa estar logado como admin.", variant: "destructive" });
+            return;
+          }
+          const { data, error } = await supabase.functions.invoke("login-beneficiario", {
+            body: { action: "admin-view", cpf: adminCpf, ano },
+          });
+          if (error) throw error;
+          if (data.error) {
+            toast({ title: "Erro", description: data.error, variant: "destructive" });
+            return;
+          }
+          setNome(data.nome);
+          setUserCpf(data.cpf);
+          setMensalidades(data.mensalidades || []);
+          setCoparticipacoes(data.coparticipacoes || []);
+          setContracheques(data.contracheques || []);
+          setComunicados(data.comunicados || []);
+          setEpis(data.epis || []);
+          setValeTransporte(data.vale_transporte || []);
+          setFaltas(data.faltas || []);
+          setRegistrosPonto(data.registros_ponto || []);
+          setAdmissao(data.admissao || null);
+          setIsAdminView(true);
+          setLoggedIn(true);
+        } catch (err: any) {
+          toast({ title: "Erro", description: err.message, variant: "destructive" });
+        } finally {
+          setLoading(false);
+        }
+      };
+      doAdminLogin();
+    }
+  }, [searchParams]);
 
   const formatCpf = (value: string) => {
     const nums = value.replace(/\D/g, "").slice(0, 11);
