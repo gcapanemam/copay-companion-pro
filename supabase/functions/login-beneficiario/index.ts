@@ -105,7 +105,6 @@ Deno.serve(async (req) => {
       // Find user
       const { data: titular } = await supabase.from("titulares").select("id, nome, cpf").eq("cpf", cleanCpf).maybeSingle();
       const { data: dependente } = await supabase.from("dependentes").select("id, nome, cpf, titular_id").eq("cpf", cleanCpf).maybeSingle();
-      if (!titular && !dependente) return jsonResponse({ error: "Beneficiário não encontrado" }, 404);
 
       let nome = "";
       let mensalidades: any[] = [];
@@ -123,6 +122,11 @@ Deno.serve(async (req) => {
         mensalidades = mens || [];
         const { data: coparts } = await supabase.from("coparticipacoes").select("*, coparticipacao_itens(*)").eq("dependente_id", dependente.id).eq("ano", selectedAno);
         coparticipacoes = coparts || [];
+      } else {
+        // Fallback: check admissoes table
+        const { data: admissaoFallback } = await supabase.from("admissoes").select("nome_completo").eq("cpf", cleanCpf).maybeSingle();
+        if (!admissaoFallback) return jsonResponse({ error: "Beneficiário não encontrado" }, 404);
+        nome = admissaoFallback.nome_completo;
       }
 
       // Fetch modules data
