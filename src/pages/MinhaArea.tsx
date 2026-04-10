@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Activity, LogOut, Printer, Heart, FileText, ShieldCheck, Bus, CalendarX, User, Megaphone, MessageCircle } from "lucide-react";
+import { Activity, LogOut, Printer, Heart, FileText, ShieldCheck, Bus, CalendarX, User, Megaphone, MessageCircle, ListTodo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,7 @@ import { PortalFaltas } from "@/components/portal/PortalFaltas";
 import { PortalMeusDados } from "@/components/portal/PortalMeusDados";
 import { PortalComunicados } from "@/components/portal/PortalComunicados";
 import { ChatContainer } from "@/components/chat/ChatContainer";
+import { PortalTarefas } from "@/components/portal/PortalTarefas";
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const HAPVIDA_CNPJ = "63.554.067/0001-98";
@@ -251,7 +252,7 @@ const MinhaArea = () => {
 
       <main className="container mx-auto px-4 py-6">
         <Tabs defaultValue="dados" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8">
+          <TabsList className="grid w-full grid-cols-9">
             <TabsTrigger value="dados" className="flex items-center gap-1"><User className="h-4 w-4" />Meus Dados</TabsTrigger>
             <TabsTrigger value="plano" className="flex items-center gap-1"><Heart className="h-4 w-4" />Plano</TabsTrigger>
             <TabsTrigger value="contracheques" className="flex items-center gap-1"><FileText className="h-4 w-4" />Contracheques</TabsTrigger>
@@ -259,6 +260,7 @@ const MinhaArea = () => {
             <TabsTrigger value="vt" className="flex items-center gap-1"><Bus className="h-4 w-4" />VT</TabsTrigger>
             <TabsTrigger value="faltas" className="flex items-center gap-1"><CalendarX className="h-4 w-4" />Ponto</TabsTrigger>
             <TabsTrigger value="comunicados" className="flex items-center gap-1"><Megaphone className="h-4 w-4" />Comunicados</TabsTrigger>
+            <TabsTrigger value="tarefas" className="flex items-center gap-1"><ListTodo className="h-4 w-4" />Tarefas</TabsTrigger>
             <TabsTrigger value="chat" className="flex items-center gap-1"><MessageCircle className="h-4 w-4" />Chat</TabsTrigger>
           </TabsList>
 
@@ -333,6 +335,10 @@ const MinhaArea = () => {
               unidade={admissao?.unidade}
               departamento={admissao?.departamento}
             />
+          </TabsContent>
+
+          <TabsContent value="tarefas">
+            <PortalTarefas cpf={userCpf} departamento={admissao?.departamento} unidade={admissao?.unidade} />
           </TabsContent>
 
           <TabsContent value="chat">
