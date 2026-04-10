@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Activity, LogOut, Printer, Heart, FileText, ShieldCheck, Bus, CalendarX, User, Megaphone, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,10 +26,12 @@ interface CopartItem { procedimento: string; local: string | null; quantidade: n
 interface Coparticipacao { mes: number; data_utilizacao: string | null; coparticipacao_itens: CopartItem[]; }
 
 const MinhaArea = () => {
+  const [searchParams] = useSearchParams();
   const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [isAdminView, setIsAdminView] = useState(false);
   const [nome, setNome] = useState("");
   const [userCpf, setUserCpf] = useState("");
   const [ano, setAno] = useState(new Date().getFullYear());
@@ -43,6 +46,49 @@ const MinhaArea = () => {
   const [admissao, setAdmissao] = useState<any>(null);
   const [showIR, setShowIR] = useState(false);
   const { toast } = useToast();
+
+  // Admin impersonation: auto-login when admin_cpf is in URL
+  useEffect(() => {
+    const adminCpf = searchParams.get("admin_cpf");
+    if (adminCpf && !loggedIn) {
+      const doAdminLogin = async () => {
+        setLoading(true);
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) {
+            toast({ title: "Erro", description: "Você precisa estar logado como admin.", variant: "destructive" });
+            return;
+          }
+          const { data, error } = await supabase.functions.invoke("login-beneficiario", {
+            body: { action: "admin-view", cpf: adminCpf, ano },
+          });
+          if (error) throw error;
+          if (data.error) {
+            toast({ title: "Erro", description: data.error, variant: "destructive" });
+            return;
+          }
+          setNome(data.nome);
+          setUserCpf(data.cpf);
+          setMensalidades(data.mensalidades || []);
+          setCoparticipacoes(data.coparticipacoes || []);
+          setContracheques(data.contracheques || []);
+          setComunicados(data.comunicados || []);
+          setEpis(data.epis || []);
+          setValeTransporte(data.vale_transporte || []);
+          setFaltas(data.faltas || []);
+          setRegistrosPonto(data.registros_ponto || []);
+          setAdmissao(data.admissao || null);
+          setIsAdminView(true);
+          setLoggedIn(true);
+        } catch (err: any) {
+          toast({ title: "Erro", description: err.message, variant: "destructive" });
+        } finally {
+          setLoading(false);
+        }
+      };
+      doAdminLogin();
+    }
+  }, [searchParams]);
 
   const formatCpf = (value: string) => {
     const nums = value.replace(/\D/g, "").slice(0, 11);
@@ -86,7 +132,7 @@ const MinhaArea = () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("login-beneficiario", {
-        body: { action: "login", cpf: userCpf, senha, ano: selectedAno },
+        body: { action: isAdminView ? "admin-view" : "login", cpf: userCpf, senha, ano: selectedAno },
       });
       if (error) throw error;
       if (!data.error) {
@@ -178,6 +224,11 @@ const MinhaArea = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {isAdminView && (
+        <div className="bg-primary text-primary-foreground text-center py-1 text-sm font-medium">
+          👁️ Visualizando como: {nome} ({formatCpf(userCpf)}) — <button className="underline" onClick={() => window.close()}>Fechar</button>
+        </div>
+      )}
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -189,9 +240,11 @@ const MinhaArea = () => {
             <select className="border rounded px-2 py-1 text-sm bg-background" value={ano} onChange={(e) => handleAnoChange(Number(e.target.value))}>
               {[2024, 2025, 2026].map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
-            <Button variant="ghost" size="sm" onClick={() => { setLoggedIn(false); setSenha(""); }}>
-              <LogOut className="h-4 w-4 mr-1" />Sair
-            </Button>
+            {!isAdminView && (
+              <Button variant="ghost" size="sm" onClick={() => { setLoggedIn(false); setSenha(""); }}>
+                <LogOut className="h-4 w-4 mr-1" />Sair
+              </Button>
+            )}
           </div>
         </div>
       </header>

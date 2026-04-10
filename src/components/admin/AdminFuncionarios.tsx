@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Search, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, Search, Users, Eye } from "lucide-react";
 import { FichaFuncionalDialog } from "./FichaFuncionalDialog";
 
 function getInitials(name: string) {
@@ -130,10 +131,14 @@ export function AdminFuncionarios() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12"></TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>CPF</TableHead>
-                    <TableHead>Função</TableHead>
-                    <TableHead>Unidade</TableHead>
+                     <TableHead className="w-12"></TableHead>
+                     <TableHead>Nome</TableHead>
+                     <TableHead>CPF</TableHead>
+                     <TableHead>Função</TableHead>
+                     <TableHead>Unidade</TableHead>
+                     <TableHead>Departamento</TableHead>
+                     <TableHead>Origem</TableHead>
+                     <TableHead className="w-12"></TableHead>
                     <TableHead>Departamento</TableHead>
                     <TableHead>Origem</TableHead>
                   </TableRow>
@@ -156,6 +161,20 @@ export function AdminFuncionarios() {
                         <TableCell>{f.dados?.departamento || f.admissao?.departamento || "-"}</TableCell>
                         <TableCell>
                           <Badge variant={f.origem === "Ambos" ? "default" : "secondary"}>{f.origem}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            title="Ver como funcionário"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(`/minha-area?admin_cpf=${f.cpf}`, "_blank");
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );

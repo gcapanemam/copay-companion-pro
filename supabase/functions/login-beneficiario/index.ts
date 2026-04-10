@@ -82,15 +82,23 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: true });
     }
 
+    // --- Admin view (impersonation, requires auth header) ---
     // --- Login ---
-    if (action === "login") {
-      if (!senha) return jsonResponse({ error: "Senha é obrigatória" }, 400);
-
-      const { data: senhaRecord } = await supabase.from("beneficiario_senhas").select("senha_hash").eq("cpf", cleanCpf).maybeSingle();
-      if (!senhaRecord) return jsonResponse({ error: "CPF não cadastrado" }, 401);
-
-      const valid = await verifyPassword(senha, senhaRecord.senha_hash);
-      if (!valid) return jsonResponse({ error: "Senha incorreta" }, 401);
+    if (action === "login" || action === "admin-view") {
+      if (action === "admin-view") {
+        // Verify the caller is an authenticated admin user
+        const authHeader = req.headers.get("authorization");
+        if (!authHeader) return jsonResponse({ error: "Não autorizado" }, 401);
+        const token = authHeader.replace("Bearer ", "");
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+        if (authError || !user) return jsonResponse({ error: "Não autorizado" }, 401);
+      } else {
+        if (!senha) return jsonResponse({ error: "Senha é obrigatória" }, 400);
+        const { data: senhaRecord } = await supabase.from("beneficiario_senhas").select("senha_hash").eq("cpf", cleanCpf).maybeSingle();
+        if (!senhaRecord) return jsonResponse({ error: "CPF não cadastrado" }, 401);
+        const valid = await verifyPassword(senha, senhaRecord.senha_hash);
+        if (!valid) return jsonResponse({ error: "Senha incorreta" }, 401);
+      }
 
       const selectedAno = ano || new Date().getFullYear();
 
