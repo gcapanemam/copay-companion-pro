@@ -131,16 +131,13 @@ export function AdminFuncionarios() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12"></TableHead>
-                     <TableHead className="w-12"></TableHead>
-                     <TableHead>Nome</TableHead>
-                     <TableHead>CPF</TableHead>
-                     <TableHead>Função</TableHead>
-                     <TableHead>Unidade</TableHead>
-                     <TableHead>Departamento</TableHead>
-                     <TableHead>Origem</TableHead>
-                     <TableHead className="w-12"></TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>CPF</TableHead>
+                    <TableHead>Função</TableHead>
+                    <TableHead>Unidade</TableHead>
                     <TableHead>Departamento</TableHead>
                     <TableHead>Origem</TableHead>
+                    <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
