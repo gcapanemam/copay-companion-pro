@@ -2,7 +2,7 @@ import { useState } from "react";
 import { UploadArea } from "@/components/UploadArea";
 import { TabelaAnual } from "@/components/TabelaAnual";
 import { SeletorAno } from "@/components/SeletorAno";
-import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX, ClipboardList, Users, Megaphone, MessageCircle } from "lucide-react";
+import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX, ClipboardList, Users, Megaphone, MessageCircle, ListTodo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -20,6 +20,7 @@ import { AdminAdmissaoCampos } from "@/components/admin/AdminAdmissaoCampos";
 import { AdminFuncionarios } from "@/components/admin/AdminFuncionarios";
 import { AdminComunicados } from "@/components/admin/AdminComunicados";
 import { ChatContainer } from "@/components/chat/ChatContainer";
+import { AdminTarefas } from "@/components/admin/AdminTarefas";
 
 const Index = () => {
   const [ano, setAno] = useState(2025);
@@ -67,7 +68,7 @@ const Index = () => {
 
       <main className="container mx-auto px-4 py-6">
         <Tabs defaultValue="plano" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-9">
+          <TabsList className="grid w-full grid-cols-10">
             <TabsTrigger value="plano" className="flex items-center gap-1">
               <Heart className="h-4 w-4" />Plano
             </TabsTrigger>
@@ -91,6 +92,9 @@ const Index = () => {
             </TabsTrigger>
             <TabsTrigger value="chat" className="flex items-center gap-1">
               <MessageCircle className="h-4 w-4" />Chat
+            </TabsTrigger>
+            <TabsTrigger value="tarefas" className="flex items-center gap-1">
+              <ListTodo className="h-4 w-4" />Tarefas
             </TabsTrigger>
             <TabsTrigger value="admissao" className="flex items-center gap-1">
               <ClipboardList className="h-4 w-4" />Admissão
@@ -154,8 +158,8 @@ const Index = () => {
             <ChatContainer meuCpf="admin" />
           </TabsContent>
 
-          <TabsContent value="admissao">
-            <AdminAdmissaoCampos />
+          <TabsContent value="tarefas">
+            <AdminTarefas />
           </TabsContent>
 
           <TabsContent value="admissao">

@@ -736,6 +736,118 @@ export type Database = {
         }
         Relationships: []
       }
+      tarefa_atualizacoes: {
+        Row: {
+          conteudo: string | null
+          cpf: string
+          created_at: string
+          id: string
+          status_anterior: string | null
+          status_novo: string | null
+          tarefa_id: string
+          tipo: string
+        }
+        Insert: {
+          conteudo?: string | null
+          cpf: string
+          created_at?: string
+          id?: string
+          status_anterior?: string | null
+          status_novo?: string | null
+          tarefa_id: string
+          tipo?: string
+        }
+        Update: {
+          conteudo?: string | null
+          cpf?: string
+          created_at?: string
+          id?: string
+          status_anterior?: string | null
+          status_novo?: string | null
+          tarefa_id?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarefa_atualizacoes_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tarefa_fotos: {
+        Row: {
+          created_at: string
+          foto_url: string
+          id: string
+          tarefa_id: string
+          tipo: string
+        }
+        Insert: {
+          created_at?: string
+          foto_url: string
+          id?: string
+          tarefa_id: string
+          tipo?: string
+        }
+        Update: {
+          created_at?: string
+          foto_url?: string
+          id?: string
+          tarefa_id?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarefa_fotos_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tarefas: {
+        Row: {
+          concluido_em: string | null
+          created_at: string
+          criado_por: string | null
+          data_prevista: string | null
+          descricao: string | null
+          id: string
+          status: string
+          tipo_destinatario: string
+          titulo: string
+          valor_destinatario: string
+        }
+        Insert: {
+          concluido_em?: string | null
+          created_at?: string
+          criado_por?: string | null
+          data_prevista?: string | null
+          descricao?: string | null
+          id?: string
+          status?: string
+          tipo_destinatario?: string
+          titulo: string
+          valor_destinatario: string
+        }
+        Update: {
+          concluido_em?: string | null
+          created_at?: string
+          criado_por?: string | null
+          data_prevista?: string | null
+          descricao?: string | null
+          id?: string
+          status?: string
+          tipo_destinatario?: string
+          titulo?: string
+          valor_destinatario?: string
+        }
+        Relationships: []
+      }
       titulares: {
         Row: {
           cpf: string | null
