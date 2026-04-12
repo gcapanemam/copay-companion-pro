@@ -21,12 +21,23 @@ import { AdminFuncionarios } from "@/components/admin/AdminFuncionarios";
 import { AdminComunicados } from "@/components/admin/AdminComunicados";
 import { ChatContainer } from "@/components/chat/ChatContainer";
 import { AdminTarefas } from "@/components/admin/AdminTarefas";
+import { useUnreadCounts } from "@/hooks/useUnreadCounts";
+
+const BadgeCount = ({ count }: { count: number }) => {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-1 bg-destructive text-destructive-foreground text-[10px] rounded-full h-5 min-w-[20px] inline-flex items-center justify-center px-1 font-bold">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+};
 
 const Index = () => {
   const [ano, setAno] = useState(2025);
   const [refreshKey, setRefreshKey] = useState(0);
   const [clearing, setClearing] = useState(false);
   const { toast } = useToast();
+  const unreadCounts = useUnreadCounts({ cpf: "admin", isAdmin: true });
 
   const handleClearData = async () => {
     setClearing(true);
@@ -91,10 +102,10 @@ const Index = () => {
               <Megaphone className="h-4 w-4" />Comunicados
             </TabsTrigger>
             <TabsTrigger value="chat" className="flex items-center gap-1">
-              <MessageCircle className="h-4 w-4" />Chat
+              <MessageCircle className="h-4 w-4" />Chat<BadgeCount count={unreadCounts.chat} />
             </TabsTrigger>
             <TabsTrigger value="tarefas" className="flex items-center gap-1">
-              <ListTodo className="h-4 w-4" />Tarefas
+              <ListTodo className="h-4 w-4" />Tarefas<BadgeCount count={unreadCounts.tarefas} />
             </TabsTrigger>
             <TabsTrigger value="admissao" className="flex items-center gap-1">
               <ClipboardList className="h-4 w-4" />Admissão
