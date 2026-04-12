@@ -80,7 +80,7 @@ const Index = () => {
 
       <main className="container mx-auto px-4 py-6">
         <Tabs defaultValue="plano" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-10">
+          <TabsList className="grid w-full grid-cols-11">
             <TabsTrigger value="plano" className="flex items-center gap-1">
               <Heart className="h-4 w-4" />Plano
             </TabsTrigger>
@@ -110,6 +110,9 @@ const Index = () => {
             </TabsTrigger>
             <TabsTrigger value="admissao" className="flex items-center gap-1">
               <ClipboardList className="h-4 w-4" />Admissão
+            </TabsTrigger>
+            <TabsTrigger value="configuracoes" className="flex items-center gap-1">
+              <Settings className="h-4 w-4" />Config
             </TabsTrigger>
           </TabsList>
 
