@@ -198,7 +198,43 @@ const MinhaArea = () => {
     }
   };
 
-  const handleResend2FA = async () => {
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: window.location.origin + "/minha-area",
+        extraParams: { prompt: "select_account" },
+      });
+      if (result.error) {
+        toast({ title: "Erro", description: "Falha ao autenticar com Google.", variant: "destructive" });
+        setGoogleLoading(false);
+        return;
+      }
+      if (result.redirected) return;
+      // Session set, fetch employee data
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email) {
+        const { data, error } = await supabase.functions.invoke("login-beneficiario", {
+          body: { action: "google-login", email: session.user.email, ano },
+        });
+        if (error) throw error;
+        if (data.error) {
+          toast({ title: "Erro", description: data.error, variant: "destructive" });
+          await supabase.auth.signOut();
+          return;
+        }
+        applyUserData(data);
+        setLoggedIn(true);
+      }
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+      await supabase.auth.signOut();
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("login-beneficiario", {
