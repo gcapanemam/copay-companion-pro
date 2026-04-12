@@ -434,7 +434,7 @@ const MinhaArea = () => {
               {[2024, 2025, 2026].map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
             {!isAdminView && (
-              <Button variant="ghost" size="sm" onClick={() => { setLoggedIn(false); setSenha(""); }}>
+              <Button variant="ghost" size="sm" onClick={async () => { await supabase.auth.signOut(); setLoggedIn(false); setSenha(""); }}>
                 <LogOut className="h-4 w-4 mr-1" />Sair
               </Button>
             )}
