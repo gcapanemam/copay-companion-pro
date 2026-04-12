@@ -66,6 +66,35 @@ const MinhaArea = () => {
   const { toast } = useToast();
   const unreadCounts = useUnreadCounts({ cpf: userCpf, departamento: admissao?.departamento, unidade: admissao?.unidade });
 
+  // Check for returning Google OAuth session
+  useEffect(() => {
+    const checkGoogleSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email && !loggedIn && !searchParams.get("admin_cpf")) {
+        setGoogleLoading(true);
+        try {
+          const { data, error } = await supabase.functions.invoke("login-beneficiario", {
+            body: { action: "google-login", email: session.user.email, ano },
+          });
+          if (error) throw error;
+          if (data.error) {
+            toast({ title: "Erro", description: data.error, variant: "destructive" });
+            await supabase.auth.signOut();
+            return;
+          }
+          applyUserData(data);
+          setLoggedIn(true);
+        } catch (err: any) {
+          toast({ title: "Erro", description: err.message, variant: "destructive" });
+          await supabase.auth.signOut();
+        } finally {
+          setGoogleLoading(false);
+        }
+      }
+    };
+    checkGoogleSession();
+  }, []);
+
   // Admin impersonation: auto-login when admin_cpf is in URL
   useEffect(() => {
     const adminCpf = searchParams.get("admin_cpf");
