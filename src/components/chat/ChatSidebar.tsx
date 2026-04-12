@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Plus, Search, Users, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,80 +26,117 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
   const [conversas, setConversas] = useState<Conversa[]>([]);
   const [busca, setBusca] = useState("");
   const [novaOpen, setNovaOpen] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const loadConversas = async () => {
-    // Get my conversations
+  const loadConversas = useCallback(async () => {
+    // 1. Get my conversation IDs
     const { data: membros } = await supabase
       .from("chat_membros").select("conversa_id").eq("cpf", meuCpf);
     if (!membros || membros.length === 0) { setConversas([]); return; }
 
     const ids = membros.map(m => m.conversa_id);
-    const { data: convs } = await supabase
-      .from("chat_conversas").select("*").in("id", ids).order("created_at", { ascending: false });
 
-    if (!convs) { setConversas([]); return; }
+    // 2. Batch: get all conversations, all members, all last messages, all statuses
+    const [convsRes, allMembrosRes, allMsgsRes] = await Promise.all([
+      supabase.from("chat_conversas").select("*").in("id", ids),
+      supabase.from("chat_membros").select("conversa_id, cpf").in("conversa_id", ids),
+      supabase.from("chat_mensagens").select("id, conversa_id, conteudo, created_at, remetente_cpf")
+        .in("conversa_id", ids).order("created_at", { ascending: false }),
+    ]);
 
-    const result: Conversa[] = [];
+    const convs = convsRes.data || [];
+    const allMembros = allMembrosRes.data || [];
+    const allMsgs = allMsgsRes.data || [];
 
-    for (const c of convs) {
+    if (convs.length === 0) { setConversas([]); return; }
+
+    // 3. Get unique other CPFs for individual chats
+    const outroCpfs = new Set<string>();
+    for (const m of allMembros) {
+      if (m.cpf !== meuCpf) outroCpfs.add(m.cpf);
+    }
+
+    // 4. Batch: get names for all other members
+    let namesMap: Record<string, string> = {};
+    if (outroCpfs.size > 0) {
+      const { data: adms } = await supabase
+        .from("admissoes").select("cpf, nome_completo").in("cpf", Array.from(outroCpfs));
+      (adms || []).forEach(a => { namesMap[a.cpf] = a.nome_completo; });
+    }
+
+    // 5. Get IDs of messages from others (for unread count)
+    const otherMsgIds = allMsgs.filter(m => m.remetente_cpf !== meuCpf).map(m => m.id);
+
+    // 6. Batch: get read statuses for all those messages
+    let statusMap = new Map<string, boolean>();
+    if (otherMsgIds.length > 0) {
+      // Supabase .in() has a limit, chunk if needed
+      const chunks = [];
+      for (let i = 0; i < otherMsgIds.length; i += 500) {
+        chunks.push(otherMsgIds.slice(i, i + 500));
+      }
+      const statusResults = await Promise.all(
+        chunks.map(chunk =>
+          supabase.from("chat_mensagem_status").select("mensagem_id, lido_em")
+            .in("mensagem_id", chunk).eq("cpf", meuCpf)
+        )
+      );
+      for (const res of statusResults) {
+        (res.data || []).forEach(s => {
+          if (s.lido_em) statusMap.set(s.mensagem_id, true);
+        });
+      }
+    }
+
+    // 7. Build result
+    const result: Conversa[] = convs.map(c => {
       let outroNome = c.nome || "";
-
       if (c.tipo === "individual") {
-        const { data: outros } = await supabase
-          .from("chat_membros").select("cpf").eq("conversa_id", c.id).neq("cpf", meuCpf);
-        if (outros && outros.length > 0) {
-          const { data: adm } = await supabase
-            .from("admissoes").select("nome_completo").eq("cpf", outros[0].cpf).maybeSingle();
-          outroNome = adm?.nome_completo || outros[0].cpf;
-        }
+        const outro = allMembros.find(m => m.conversa_id === c.id && m.cpf !== meuCpf);
+        outroNome = outro ? (namesMap[outro.cpf] || outro.cpf) : "";
       }
 
-      // Last message
-      const { data: msgs } = await supabase
-        .from("chat_mensagens").select("conteudo, created_at")
-        .eq("conversa_id", c.id).order("created_at", { ascending: false }).limit(1);
+      // Last message for this conversation
+      const lastMsg = allMsgs.find(m => m.conversa_id === c.id);
 
-      // Unread count
-      const { data: allMsgs } = await supabase
-        .from("chat_mensagens").select("id").eq("conversa_id", c.id).neq("remetente_cpf", meuCpf);
-      const msgIds = (allMsgs || []).map(m => m.id);
+      // Unread count for this conversation
+      const convOtherMsgs = allMsgs.filter(m => m.conversa_id === c.id && m.remetente_cpf !== meuCpf);
+      const naoLidas = convOtherMsgs.filter(m => !statusMap.has(m.id)).length;
 
-      let naoLidas = 0;
-      if (msgIds.length > 0) {
-        const { data: status } = await supabase
-          .from("chat_mensagem_status").select("mensagem_id, lido_em")
-          .in("mensagem_id", msgIds).eq("cpf", meuCpf);
-        const lidosSet = new Set((status || []).filter(s => s.lido_em).map(s => s.mensagem_id));
-        naoLidas = msgIds.filter(id => !lidosSet.has(id)).length;
-      }
-
-      result.push({
+      return {
         id: c.id,
         tipo: c.tipo,
         nome: c.nome,
         outroNome,
-        ultimaMensagem: msgs?.[0]?.conteudo || "",
-        ultimaData: msgs?.[0]?.created_at || c.created_at,
+        ultimaMensagem: lastMsg?.conteudo || "",
+        ultimaData: lastMsg?.created_at || c.created_at,
         naoLidas,
-      });
-    }
+      };
+    });
 
-    // Sort by last message date
     result.sort((a, b) => new Date(b.ultimaData || "").getTime() - new Date(a.ultimaData || "").getTime());
     setConversas(result);
-  };
+  }, [meuCpf]);
+
+  const debouncedLoad = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => loadConversas(), 300);
+  }, [loadConversas]);
 
   useEffect(() => { loadConversas(); }, [meuCpf]);
 
-  // Realtime reload
+  // Realtime reload with debounce
   useEffect(() => {
     const channel = supabase
-      .channel("chat-sidebar")
-      .on("postgres_changes", { event: "*", schema: "public", table: "chat_mensagens" }, () => loadConversas())
-      .on("postgres_changes", { event: "*", schema: "public", table: "chat_mensagem_status" }, () => loadConversas())
+      .channel("chat-sidebar-" + meuCpf)
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_mensagens" }, debouncedLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_mensagem_status" }, debouncedLoad)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [meuCpf]);
+    return () => {
+      supabase.removeChannel(channel);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [meuCpf, debouncedLoad]);
 
   const filtradas = conversas.filter(c => {
     const nome = (c.tipo === "grupo" ? c.nome : c.outroNome) || "";
