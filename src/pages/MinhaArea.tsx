@@ -56,6 +56,11 @@ const MinhaArea = () => {
   const [registrosPonto, setRegistrosPonto] = useState<any[]>([]);
   const [admissao, setAdmissao] = useState<any>(null);
   const [showIR, setShowIR] = useState(false);
+  // 2FA state
+  const [requires2FA, setRequires2FA] = useState(false);
+  const [twoFACpf, setTwoFACpf] = useState("");
+  const [twoFACode, setTwoFACode] = useState("");
+  const [maskedEmail, setMaskedEmail] = useState("");
   const { toast } = useToast();
   const unreadCounts = useUnreadCounts({ cpf: userCpf, departamento: admissao?.departamento, unidade: admissao?.unidade });
 
@@ -79,17 +84,7 @@ const MinhaArea = () => {
             toast({ title: "Erro", description: data.error, variant: "destructive" });
             return;
           }
-          setNome(data.nome);
-          setUserCpf(data.cpf);
-          setMensalidades(data.mensalidades || []);
-          setCoparticipacoes(data.coparticipacoes || []);
-          setContracheques(data.contracheques || []);
-          setComunicados(data.comunicados || []);
-          setEpis(data.epis || []);
-          setValeTransporte(data.vale_transporte || []);
-          setFaltas(data.faltas || []);
-          setRegistrosPonto(data.registros_ponto || []);
-          setAdmissao(data.admissao || null);
+          applyUserData(data);
           setIsAdminView(true);
           setLoggedIn(true);
         } catch (err: any) {
@@ -101,6 +96,20 @@ const MinhaArea = () => {
       doAdminLogin();
     }
   }, [searchParams]);
+
+  const applyUserData = (data: any) => {
+    setNome(data.nome);
+    setUserCpf(data.cpf);
+    setMensalidades(data.mensalidades || []);
+    setCoparticipacoes(data.coparticipacoes || []);
+    setContracheques(data.contracheques || []);
+    setComunicados(data.comunicados || []);
+    setEpis(data.epis || []);
+    setValeTransporte(data.vale_transporte || []);
+    setFaltas(data.faltas || []);
+    setRegistrosPonto(data.registros_ponto || []);
+    setAdmissao(data.admissao || null);
+  };
 
   const formatCpf = (value: string) => {
     const nums = value.replace(/\D/g, "").slice(0, 11);
@@ -121,17 +130,14 @@ const MinhaArea = () => {
         toast({ title: "Erro", description: data.error, variant: "destructive" });
         return;
       }
-      setNome(data.nome);
-      setUserCpf(data.cpf);
-      setMensalidades(data.mensalidades || []);
-      setCoparticipacoes(data.coparticipacoes || []);
-      setContracheques(data.contracheques || []);
-      setComunicados(data.comunicados || []);
-      setEpis(data.epis || []);
-      setValeTransporte(data.vale_transporte || []);
-      setFaltas(data.faltas || []);
-      setRegistrosPonto(data.registros_ponto || []);
-      setAdmissao(data.admissao || null);
+      if (data.requires_2fa) {
+        setRequires2FA(true);
+        setTwoFACpf(data.cpf);
+        setMaskedEmail(data.masked_email || "");
+        toast({ title: "Código enviado", description: data.masked_email ? `Código enviado para ${data.masked_email}` : "Código de verificação gerado." });
+        return;
+      }
+      applyUserData(data);
       setLoggedIn(true);
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
@@ -139,6 +145,45 @@ const MinhaArea = () => {
       setLoading(false);
     }
   };
+
+  const handleVerify2FA = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("login-beneficiario", {
+        body: { action: "verify-2fa", cpf: twoFACpf, codigo: twoFACode, ano },
+      });
+      if (error) throw error;
+      if (data.error) {
+        toast({ title: "Erro", description: data.error, variant: "destructive" });
+        return;
+      }
+      applyUserData(data);
+      setLoggedIn(true);
+      setRequires2FA(false);
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend2FA = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("login-beneficiario", {
+        body: { action: "login", cpf, senha, ano },
+      });
+      if (error) throw error;
+      if (data.requires_2fa) {
+        toast({ title: "Código reenviado", description: "Um novo código foi enviado para seu e-mail." });
+      }
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   const reloadData = async (selectedAno: number) => {
     setLoading(true);
@@ -205,6 +250,57 @@ const MinhaArea = () => {
   }
 
   if (!loggedIn) {
+    if (requires2FA) {
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <Activity className="h-6 w-6 text-primary" />
+                <CardTitle>Verificação em Dois Fatores</CardTitle>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {maskedEmail
+                  ? `Digite o código de 6 dígitos enviado para ${maskedEmail}`
+                  : "Digite o código de 6 dígitos de verificação"}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Código de Verificação</Label>
+                <Input
+                  placeholder="000000"
+                  value={twoFACode}
+                  onChange={(e) => setTwoFACode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  maxLength={6}
+                  className="text-center text-2xl tracking-[0.5em] font-mono"
+                  onKeyDown={(e) => e.key === "Enter" && twoFACode.length === 6 && handleVerify2FA()}
+                />
+              </div>
+              <Button className="w-full" onClick={handleVerify2FA} disabled={loading || twoFACode.length !== 6}>
+                {loading ? "Verificando..." : "Verificar"}
+              </Button>
+              <div className="flex items-center justify-between">
+                <button
+                  className="text-sm text-muted-foreground hover:text-primary"
+                  onClick={() => { setRequires2FA(false); setTwoFACode(""); }}
+                >
+                  ← Voltar
+                </button>
+                <button
+                  className="text-sm text-muted-foreground hover:text-primary"
+                  onClick={handleResend2FA}
+                  disabled={loading}
+                >
+                  Reenviar código
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="w-full max-w-md">

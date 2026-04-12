@@ -2,7 +2,7 @@ import { useState } from "react";
 import { UploadArea } from "@/components/UploadArea";
 import { TabelaAnual } from "@/components/TabelaAnual";
 import { SeletorAno } from "@/components/SeletorAno";
-import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX, ClipboardList, Users, Megaphone, MessageCircle, ListTodo } from "lucide-react";
+import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX, ClipboardList, Users, Megaphone, MessageCircle, ListTodo, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +21,7 @@ import { AdminFuncionarios } from "@/components/admin/AdminFuncionarios";
 import { AdminComunicados } from "@/components/admin/AdminComunicados";
 import { ChatContainer } from "@/components/chat/ChatContainer";
 import { AdminTarefas } from "@/components/admin/AdminTarefas";
+import { AdminConfiguracoes } from "@/components/admin/AdminConfiguracoes";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 
 const BadgeCount = ({ count }: { count: number }) => {
@@ -79,7 +80,7 @@ const Index = () => {
 
       <main className="container mx-auto px-4 py-6">
         <Tabs defaultValue="plano" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-10">
+          <TabsList className="grid w-full grid-cols-11">
             <TabsTrigger value="plano" className="flex items-center gap-1">
               <Heart className="h-4 w-4" />Plano
             </TabsTrigger>
@@ -109,6 +110,9 @@ const Index = () => {
             </TabsTrigger>
             <TabsTrigger value="admissao" className="flex items-center gap-1">
               <ClipboardList className="h-4 w-4" />Admissão
+            </TabsTrigger>
+            <TabsTrigger value="configuracoes" className="flex items-center gap-1">
+              <Settings className="h-4 w-4" />Config
             </TabsTrigger>
           </TabsList>
 
@@ -175,6 +179,10 @@ const Index = () => {
 
           <TabsContent value="admissao">
             <AdminAdmissaoCampos />
+          </TabsContent>
+
+          <TabsContent value="configuracoes">
+            <AdminConfiguracoes />
           </TabsContent>
         </Tabs>
       </main>

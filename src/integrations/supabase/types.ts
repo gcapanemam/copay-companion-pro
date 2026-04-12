@@ -332,6 +332,33 @@ export type Database = {
           },
         ]
       }
+      codigos_2fa: {
+        Row: {
+          codigo: string
+          cpf: string
+          created_at: string
+          expira_em: string
+          id: string
+          usado: boolean
+        }
+        Insert: {
+          codigo: string
+          cpf: string
+          created_at?: string
+          expira_em: string
+          id?: string
+          usado?: boolean
+        }
+        Update: {
+          codigo?: string
+          cpf?: string
+          created_at?: string
+          expira_em?: string
+          id?: string
+          usado?: boolean
+        }
+        Relationships: []
+      }
       comunicado_destinatarios: {
         Row: {
           comunicado_id: string
@@ -423,6 +450,27 @@ export type Database = {
           tipo_destinatario?: string
           titulo?: string
           valor_destinatario?: string | null
+        }
+        Relationships: []
+      }
+      configuracoes: {
+        Row: {
+          chave: string
+          created_at: string
+          id: string
+          valor: string
+        }
+        Insert: {
+          chave: string
+          created_at?: string
+          id?: string
+          valor?: string
+        }
+        Update: {
+          chave?: string
+          created_at?: string
+          id?: string
+          valor?: string
         }
         Relationships: []
       }
