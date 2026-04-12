@@ -42,6 +42,7 @@ const MinhaArea = () => {
   const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [isAdminView, setIsAdminView] = useState(false);
   const [nome, setNome] = useState("");
