@@ -317,6 +317,18 @@ const MinhaArea = () => {
   }
 
   if (!loggedIn) {
+    if (googleLoading) {
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <Card className="w-full max-w-md">
+            <CardContent className="py-12 text-center">
+              <Activity className="h-8 w-8 text-primary mx-auto animate-spin mb-4" />
+              <p className="text-muted-foreground">Autenticando com Google...</p>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
     if (requires2FA) {
       return (
         <div className="min-h-screen bg-background flex items-center justify-center">
