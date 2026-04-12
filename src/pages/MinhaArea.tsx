@@ -250,6 +250,57 @@ const MinhaArea = () => {
   }
 
   if (!loggedIn) {
+    if (requires2FA) {
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <Activity className="h-6 w-6 text-primary" />
+                <CardTitle>Verificação em Dois Fatores</CardTitle>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {maskedEmail
+                  ? `Digite o código de 6 dígitos enviado para ${maskedEmail}`
+                  : "Digite o código de 6 dígitos de verificação"}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Código de Verificação</Label>
+                <Input
+                  placeholder="000000"
+                  value={twoFACode}
+                  onChange={(e) => setTwoFACode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  maxLength={6}
+                  className="text-center text-2xl tracking-[0.5em] font-mono"
+                  onKeyDown={(e) => e.key === "Enter" && twoFACode.length === 6 && handleVerify2FA()}
+                />
+              </div>
+              <Button className="w-full" onClick={handleVerify2FA} disabled={loading || twoFACode.length !== 6}>
+                {loading ? "Verificando..." : "Verificar"}
+              </Button>
+              <div className="flex items-center justify-between">
+                <button
+                  className="text-sm text-muted-foreground hover:text-primary"
+                  onClick={() => { setRequires2FA(false); setTwoFACode(""); }}
+                >
+                  ← Voltar
+                </button>
+                <button
+                  className="text-sm text-muted-foreground hover:text-primary"
+                  onClick={handleResend2FA}
+                  disabled={loading}
+                >
+                  Reenviar código
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="w-full max-w-md">
