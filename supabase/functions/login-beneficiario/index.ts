@@ -216,7 +216,6 @@ Deno.serve(async (req) => {
 
     // --- Google login (match email to CPF) ---
     if (action === "google-login") {
-      const { email: googleEmail } = await req.json().catch(() => ({}));
       if (!googleEmail) return jsonResponse({ error: "E-mail não informado" }, 400);
 
       const { data: admissaoByEmail } = await supabase
