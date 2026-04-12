@@ -57,6 +57,7 @@ const MinhaArea = () => {
   const [admissao, setAdmissao] = useState<any>(null);
   const [showIR, setShowIR] = useState(false);
   const { toast } = useToast();
+  const unreadCounts = useUnreadCounts({ cpf: userCpf, departamento: admissao?.departamento, unidade: admissao?.unidade });
 
   // Admin impersonation: auto-login when admin_cpf is in URL
   useEffect(() => {
