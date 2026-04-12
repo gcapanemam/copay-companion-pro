@@ -56,6 +56,11 @@ const MinhaArea = () => {
   const [registrosPonto, setRegistrosPonto] = useState<any[]>([]);
   const [admissao, setAdmissao] = useState<any>(null);
   const [showIR, setShowIR] = useState(false);
+  // 2FA state
+  const [requires2FA, setRequires2FA] = useState(false);
+  const [twoFACpf, setTwoFACpf] = useState("");
+  const [twoFACode, setTwoFACode] = useState("");
+  const [maskedEmail, setMaskedEmail] = useState("");
   const { toast } = useToast();
   const unreadCounts = useUnreadCounts({ cpf: userCpf, departamento: admissao?.departamento, unidade: admissao?.unidade });
 
@@ -79,17 +84,7 @@ const MinhaArea = () => {
             toast({ title: "Erro", description: data.error, variant: "destructive" });
             return;
           }
-          setNome(data.nome);
-          setUserCpf(data.cpf);
-          setMensalidades(data.mensalidades || []);
-          setCoparticipacoes(data.coparticipacoes || []);
-          setContracheques(data.contracheques || []);
-          setComunicados(data.comunicados || []);
-          setEpis(data.epis || []);
-          setValeTransporte(data.vale_transporte || []);
-          setFaltas(data.faltas || []);
-          setRegistrosPonto(data.registros_ponto || []);
-          setAdmissao(data.admissao || null);
+          applyUserData(data);
           setIsAdminView(true);
           setLoggedIn(true);
         } catch (err: any) {
@@ -101,6 +96,20 @@ const MinhaArea = () => {
       doAdminLogin();
     }
   }, [searchParams]);
+
+  const applyUserData = (data: any) => {
+    setNome(data.nome);
+    setUserCpf(data.cpf);
+    setMensalidades(data.mensalidades || []);
+    setCoparticipacoes(data.coparticipacoes || []);
+    setContracheques(data.contracheques || []);
+    setComunicados(data.comunicados || []);
+    setEpis(data.epis || []);
+    setValeTransporte(data.vale_transporte || []);
+    setFaltas(data.faltas || []);
+    setRegistrosPonto(data.registros_ponto || []);
+    setAdmissao(data.admissao || null);
+  };
 
   const formatCpf = (value: string) => {
     const nums = value.replace(/\D/g, "").slice(0, 11);
@@ -121,18 +130,77 @@ const MinhaArea = () => {
         toast({ title: "Erro", description: data.error, variant: "destructive" });
         return;
       }
-      setNome(data.nome);
-      setUserCpf(data.cpf);
-      setMensalidades(data.mensalidades || []);
-      setCoparticipacoes(data.coparticipacoes || []);
-      setContracheques(data.contracheques || []);
-      setComunicados(data.comunicados || []);
-      setEpis(data.epis || []);
-      setValeTransporte(data.vale_transporte || []);
-      setFaltas(data.faltas || []);
-      setRegistrosPonto(data.registros_ponto || []);
-      setAdmissao(data.admissao || null);
+      if (data.requires_2fa) {
+        setRequires2FA(true);
+        setTwoFACpf(data.cpf);
+        setMaskedEmail(data.masked_email || "");
+        toast({ title: "Código enviado", description: data.masked_email ? `Código enviado para ${data.masked_email}` : "Código de verificação gerado." });
+        return;
+      }
+      applyUserData(data);
       setLoggedIn(true);
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify2FA = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("login-beneficiario", {
+        body: { action: "verify-2fa", cpf: twoFACpf, codigo: twoFACode, ano },
+      });
+      if (error) throw error;
+      if (data.error) {
+        toast({ title: "Erro", description: data.error, variant: "destructive" });
+        return;
+      }
+      applyUserData(data);
+      setLoggedIn(true);
+      setRequires2FA(false);
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend2FA = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("login-beneficiario", {
+        body: { action: "login", cpf, senha, ano },
+      });
+      if (error) throw error;
+      if (data.requires_2fa) {
+        toast({ title: "Código reenviado", description: "Um novo código foi enviado para seu e-mail." });
+      }
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const reloadData = async (selectedAno: number) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("login-beneficiario", {
+        body: { action: isAdminView ? "admin-view" : "login", cpf: userCpf, senha, ano: selectedAno },
+      });
+      if (error) throw error;
+      if (!data.error) {
+        setMensalidades(data.mensalidades || []);
+        setCoparticipacoes(data.coparticipacoes || []);
+        setContracheques(data.contracheques || []);
+        setComunicados(data.comunicados || []);
+        setEpis(data.epis || []);
+        setValeTransporte(data.vale_transporte || []);
+        setFaltas(data.faltas || []);
+        setRegistrosPonto(data.registros_ponto || []);
+      }
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
