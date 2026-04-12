@@ -184,29 +184,6 @@ const MinhaArea = () => {
     }
   };
 
-  const reloadData = async (selectedAno: number) => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("login-beneficiario", {
-        body: { action: isAdminView ? "admin-view" : "login", cpf: userCpf, senha, ano: selectedAno },
-      });
-      if (error) throw error;
-      if (!data.error) {
-        setMensalidades(data.mensalidades || []);
-        setCoparticipacoes(data.coparticipacoes || []);
-        setContracheques(data.contracheques || []);
-        setComunicados(data.comunicados || []);
-        setEpis(data.epis || []);
-        setValeTransporte(data.vale_transporte || []);
-        setFaltas(data.faltas || []);
-        setRegistrosPonto(data.registros_ponto || []);
-      }
-    } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const reloadData = async (selectedAno: number) => {
     setLoading(true);
