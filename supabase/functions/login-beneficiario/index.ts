@@ -21,6 +21,12 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
   return newHashHex === hashHex;
 }
 
+function generateCode(): string {
+  const array = new Uint32Array(1);
+  crypto.getRandomValues(array);
+  return String(array[0] % 1000000).padStart(6, "0");
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -33,6 +39,79 @@ function jsonResponse(body: any, status = 200) {
   });
 }
 
+async function is2FAEnabled(supabase: any): Promise<boolean> {
+  const { data } = await supabase
+    .from("configuracoes")
+    .select("valor")
+    .eq("chave", "dois_fatores_ativo")
+    .maybeSingle();
+  return data?.valor === "true";
+}
+
+async function getUserData(supabase: any, cleanCpf: string, selectedAno: number) {
+  const { data: titular } = await supabase.from("titulares").select("id, nome, cpf").eq("cpf", cleanCpf).maybeSingle();
+  const { data: dependente } = await supabase.from("dependentes").select("id, nome, cpf, titular_id").eq("cpf", cleanCpf).maybeSingle();
+
+  let nome = "";
+  let mensalidades: any[] = [];
+  let coparticipacoes: any[] = [];
+
+  if (titular) {
+    nome = titular.nome;
+    const { data: mens } = await supabase.from("mensalidades").select("*").eq("titular_id", titular.id).is("dependente_id", null).eq("ano", selectedAno);
+    mensalidades = mens || [];
+    const { data: coparts } = await supabase.from("coparticipacoes").select("*, coparticipacao_itens(*)").eq("titular_id", titular.id).is("dependente_id", null).eq("ano", selectedAno);
+    coparticipacoes = coparts || [];
+  } else if (dependente) {
+    nome = dependente.nome;
+    const { data: mens } = await supabase.from("mensalidades").select("*").eq("dependente_id", dependente.id).eq("ano", selectedAno);
+    mensalidades = mens || [];
+    const { data: coparts } = await supabase.from("coparticipacoes").select("*, coparticipacao_itens(*)").eq("dependente_id", dependente.id).eq("ano", selectedAno);
+    coparticipacoes = coparts || [];
+  } else {
+    const { data: admissaoFallback } = await supabase.from("admissoes").select("nome_completo").eq("cpf", cleanCpf).maybeSingle();
+    if (!admissaoFallback) return null;
+    nome = admissaoFallback.nome_completo;
+  }
+
+  const { data: contracheques } = await supabase.from("contracheques").select("*").eq("cpf", cleanCpf).eq("ano", selectedAno).order("mes");
+  const { data: epis } = await supabase.from("epis").select("*").eq("cpf", cleanCpf).order("data_entrega", { ascending: false });
+  const { data: valeTransporte } = await supabase.from("vale_transporte").select("*").eq("cpf", cleanCpf).eq("ano", selectedAno).order("mes");
+  const { data: faltas } = await supabase.from("faltas").select("*").eq("cpf", cleanCpf).order("data_falta", { ascending: false });
+  const { data: registrosPonto } = await supabase.from("registros_ponto").select("*").eq("cpf", cleanCpf).order("data", { ascending: false });
+  const { data: admissao } = await supabase.from("admissoes").select("*").eq("cpf", cleanCpf).maybeSingle();
+
+  const userUnidade = admissao?.unidade || null;
+  const userDepartamento = admissao?.departamento || null;
+
+  const { data: allComunicados } = await supabase.from("comunicados").select("*").order("created_at", { ascending: false });
+  const { data: destinatariosSelecionados } = await supabase.from("comunicado_destinatarios").select("comunicado_id, cpf").eq("cpf", cleanCpf);
+  const selecionadosIds = new Set((destinatariosSelecionados || []).map((d: any) => d.comunicado_id));
+
+  const comunicados = (allComunicados || []).filter((c: any) => {
+    if (c.tipo_destinatario === "todos") return true;
+    if (c.tipo_destinatario === "unidade" && c.valor_destinatario === userUnidade) return true;
+    if (c.tipo_destinatario === "departamento" && c.valor_destinatario === userDepartamento) return true;
+    if (c.tipo_destinatario === "selecionados" && selecionadosIds.has(c.id)) return true;
+    return false;
+  });
+
+  return {
+    nome,
+    cpf: cleanCpf,
+    ano: selectedAno,
+    mensalidades,
+    coparticipacoes,
+    contracheques: contracheques || [],
+    epis: epis || [],
+    vale_transporte: valeTransporte || [],
+    faltas: faltas || [],
+    registros_ponto: registrosPonto || [],
+    admissao: admissao || null,
+    comunicados,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -40,7 +119,32 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const { action, cpf, senha, ano } = await req.json();
+    const { action, cpf, senha, ano, codigo } = await req.json();
+
+    // --- Check 2FA config ---
+    if (action === "check-2fa-config") {
+      const enabled = await is2FAEnabled(supabase);
+      return jsonResponse({ dois_fatores_ativo: enabled });
+    }
+
+    // --- Toggle 2FA (admin only) ---
+    if (action === "toggle-2fa") {
+      const authHeader = req.headers.get("authorization");
+      if (!authHeader) return jsonResponse({ error: "Não autorizado" }, 401);
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !user) return jsonResponse({ error: "Não autorizado" }, 401);
+
+      const { valor } = await req.json().catch(() => ({}));
+      const newValue = valor !== undefined ? String(valor) : "false";
+      
+      const { error } = await supabase
+        .from("configuracoes")
+        .update({ valor: newValue })
+        .eq("chave", "dois_fatores_ativo");
+      if (error) throw error;
+      return jsonResponse({ success: true, valor: newValue });
+    }
 
     // --- List beneficiaries ---
     if (action === "list-beneficiarios") {
@@ -82,11 +186,37 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: true });
     }
 
-    // --- Admin view (impersonation, requires auth header) ---
-    // --- Login ---
+    // --- Verify 2FA code ---
+    if (action === "verify-2fa") {
+      if (!codigo) return jsonResponse({ error: "Código é obrigatório" }, 400);
+
+      const { data: codeRecord } = await supabase
+        .from("codigos_2fa")
+        .select("*")
+        .eq("cpf", cleanCpf)
+        .eq("codigo", codigo)
+        .eq("usado", false)
+        .gt("expira_em", new Date().toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!codeRecord) return jsonResponse({ error: "Código inválido ou expirado" }, 401);
+
+      // Mark code as used
+      await supabase.from("codigos_2fa").update({ usado: true }).eq("id", codeRecord.id);
+
+      // Return user data
+      const selectedAno = ano || new Date().getFullYear();
+      const userData = await getUserData(supabase, cleanCpf, selectedAno);
+      if (!userData) return jsonResponse({ error: "Beneficiário não encontrado" }, 404);
+
+      return jsonResponse({ success: true, ...userData });
+    }
+
+    // --- Admin view (impersonation) / Login ---
     if (action === "login" || action === "admin-view") {
       if (action === "admin-view") {
-        // Verify the caller is an authenticated admin user
         const authHeader = req.headers.get("authorization");
         if (!authHeader) return jsonResponse({ error: "Não autorizado" }, 401);
         const token = authHeader.replace("Bearer ", "");
@@ -98,77 +228,65 @@ Deno.serve(async (req) => {
         if (!senhaRecord) return jsonResponse({ error: "CPF não cadastrado" }, 401);
         const valid = await verifyPassword(senha, senhaRecord.senha_hash);
         if (!valid) return jsonResponse({ error: "Senha incorreta" }, 401);
+
+        // Check if 2FA is enabled
+        const twoFAEnabled = await is2FAEnabled(supabase);
+        if (twoFAEnabled) {
+          // Generate 2FA code
+          const code = generateCode();
+          const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+          // Store code
+          await supabase.from("codigos_2fa").insert({
+            cpf: cleanCpf,
+            codigo: code,
+            expira_em: expiresAt,
+          });
+
+          // Get employee email from admissoes
+          const { data: admissao } = await supabase.from("admissoes").select("email, nome_completo").eq("cpf", cleanCpf).maybeSingle();
+          const employeeEmail = admissao?.email;
+          const employeeName = admissao?.nome_completo || "";
+
+          if (employeeEmail) {
+            // Send 2FA email via send-2fa-email function
+            try {
+              const sendUrl = `${supabaseUrl}/functions/v1/send-2fa-email`;
+              await fetch(sendUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${supabaseServiceKey}`,
+                },
+                body: JSON.stringify({ email: employeeEmail, codigo: code, nome: employeeName }),
+              });
+            } catch (emailErr) {
+              console.error("Failed to send 2FA email:", emailErr);
+            }
+          } else {
+            console.warn("Employee has no email configured for CPF:", cleanCpf);
+          }
+
+          // Mask email for UI
+          let maskedEmail = "";
+          if (employeeEmail) {
+            const [user, domain] = employeeEmail.split("@");
+            maskedEmail = `${user.slice(0, 2)}***@${domain}`;
+          }
+
+          return jsonResponse({
+            requires_2fa: true,
+            cpf: cleanCpf,
+            masked_email: maskedEmail,
+          });
+        }
       }
 
       const selectedAno = ano || new Date().getFullYear();
+      const userData = await getUserData(supabase, cleanCpf, selectedAno);
+      if (!userData) return jsonResponse({ error: "Beneficiário não encontrado" }, 404);
 
-      // Find user
-      const { data: titular } = await supabase.from("titulares").select("id, nome, cpf").eq("cpf", cleanCpf).maybeSingle();
-      const { data: dependente } = await supabase.from("dependentes").select("id, nome, cpf, titular_id").eq("cpf", cleanCpf).maybeSingle();
-
-      let nome = "";
-      let mensalidades: any[] = [];
-      let coparticipacoes: any[] = [];
-
-      if (titular) {
-        nome = titular.nome;
-        const { data: mens } = await supabase.from("mensalidades").select("*").eq("titular_id", titular.id).is("dependente_id", null).eq("ano", selectedAno);
-        mensalidades = mens || [];
-        const { data: coparts } = await supabase.from("coparticipacoes").select("*, coparticipacao_itens(*)").eq("titular_id", titular.id).is("dependente_id", null).eq("ano", selectedAno);
-        coparticipacoes = coparts || [];
-      } else if (dependente) {
-        nome = dependente.nome;
-        const { data: mens } = await supabase.from("mensalidades").select("*").eq("dependente_id", dependente.id).eq("ano", selectedAno);
-        mensalidades = mens || [];
-        const { data: coparts } = await supabase.from("coparticipacoes").select("*, coparticipacao_itens(*)").eq("dependente_id", dependente.id).eq("ano", selectedAno);
-        coparticipacoes = coparts || [];
-      } else {
-        // Fallback: check admissoes table
-        const { data: admissaoFallback } = await supabase.from("admissoes").select("nome_completo").eq("cpf", cleanCpf).maybeSingle();
-        if (!admissaoFallback) return jsonResponse({ error: "Beneficiário não encontrado" }, 404);
-        nome = admissaoFallback.nome_completo;
-      }
-
-      // Fetch modules data
-      const { data: contracheques } = await supabase.from("contracheques").select("*").eq("cpf", cleanCpf).eq("ano", selectedAno).order("mes");
-      const { data: epis } = await supabase.from("epis").select("*").eq("cpf", cleanCpf).order("data_entrega", { ascending: false });
-      const { data: valeTransporte } = await supabase.from("vale_transporte").select("*").eq("cpf", cleanCpf).eq("ano", selectedAno).order("mes");
-      const { data: faltas } = await supabase.from("faltas").select("*").eq("cpf", cleanCpf).order("data_falta", { ascending: false });
-      const { data: registrosPonto } = await supabase.from("registros_ponto").select("*").eq("cpf", cleanCpf).order("data", { ascending: false });
-      const { data: admissao } = await supabase.from("admissoes").select("*").eq("cpf", cleanCpf).maybeSingle();
-
-      // Fetch comunicados for this user
-      const userUnidade = admissao?.unidade || null;
-      const userDepartamento = admissao?.departamento || null;
-
-      // Get all comunicados then filter
-      const { data: allComunicados } = await supabase.from("comunicados").select("*").order("created_at", { ascending: false });
-      const { data: destinatariosSelecionados } = await supabase.from("comunicado_destinatarios").select("comunicado_id, cpf").eq("cpf", cleanCpf);
-      const selecionadosIds = new Set((destinatariosSelecionados || []).map(d => d.comunicado_id));
-
-      const comunicados = (allComunicados || []).filter(c => {
-        if (c.tipo_destinatario === "todos") return true;
-        if (c.tipo_destinatario === "unidade" && c.valor_destinatario === userUnidade) return true;
-        if (c.tipo_destinatario === "departamento" && c.valor_destinatario === userDepartamento) return true;
-        if (c.tipo_destinatario === "selecionados" && selecionadosIds.has(c.id)) return true;
-        return false;
-      });
-
-      return jsonResponse({
-        success: true,
-        nome,
-        cpf: cleanCpf,
-        ano: selectedAno,
-        mensalidades,
-        coparticipacoes,
-        contracheques: contracheques || [],
-        epis: epis || [],
-        vale_transporte: valeTransporte || [],
-        faltas: faltas || [],
-        registros_ponto: registrosPonto || [],
-        admissao: admissao || null,
-        comunicados,
-      });
+      return jsonResponse({ success: true, ...userData });
     }
 
     return jsonResponse({ error: "Ação inválida" }, 400);
