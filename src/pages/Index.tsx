@@ -180,6 +180,10 @@ const Index = () => {
           <TabsContent value="admissao">
             <AdminAdmissaoCampos />
           </TabsContent>
+
+          <TabsContent value="configuracoes">
+            <AdminConfiguracoes />
+          </TabsContent>
         </Tabs>
       </main>
     </div>
