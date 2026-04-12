@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const { action, cpf, senha, ano, codigo } = await req.json();
+    const { action, cpf, senha, ano, codigo, email: googleEmail, valor } = await req.json();
 
     // --- Check 2FA config ---
     if (action === "check-2fa-config") {
@@ -135,7 +135,6 @@ Deno.serve(async (req) => {
       const { data: { user }, error: authError } = await supabase.auth.getUser(token);
       if (authError || !user) return jsonResponse({ error: "Não autorizado" }, 401);
 
-      const { valor } = await req.json().catch(() => ({}));
       const newValue = valor !== undefined ? String(valor) : "false";
       
       const { error } = await supabase
@@ -209,6 +208,28 @@ Deno.serve(async (req) => {
       // Return user data
       const selectedAno = ano || new Date().getFullYear();
       const userData = await getUserData(supabase, cleanCpf, selectedAno);
+      if (!userData) return jsonResponse({ error: "Beneficiário não encontrado" }, 404);
+
+      return jsonResponse({ success: true, ...userData });
+    }
+
+    // --- Google login (match email to CPF) ---
+    if (action === "google-login") {
+      if (!googleEmail) return jsonResponse({ error: "E-mail não informado" }, 400);
+
+      const { data: admissaoByEmail } = await supabase
+        .from("admissoes")
+        .select("cpf, nome_completo")
+        .eq("email", googleEmail.toLowerCase().trim())
+        .maybeSingle();
+
+      if (!admissaoByEmail) {
+        return jsonResponse({ error: "Nenhum funcionário encontrado com este e-mail. Verifique se seu e-mail está cadastrado na ficha de admissão." }, 404);
+      }
+
+      const foundCpf = admissaoByEmail.cpf.replace(/[^0-9]/g, "");
+      const selectedAno = ano || new Date().getFullYear();
+      const userData = await getUserData(supabase, foundCpf, selectedAno);
       if (!userData) return jsonResponse({ error: "Beneficiário não encontrado" }, 404);
 
       return jsonResponse({ success: true, ...userData });
