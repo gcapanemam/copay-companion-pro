@@ -76,12 +76,12 @@ export const ChatWindow = ({ conversaId, meuCpf }: ChatWindowProps) => {
 
     setMensagens(result);
 
-    // Mark as received and read
+    // Mark as received and read — batch upsert
     const unread = msgs.filter(m => m.remetente_cpf !== meuCpf);
-    for (const m of unread) {
+    if (unread.length > 0) {
       const now = new Date().toISOString();
       await supabase.from("chat_mensagem_status").upsert(
-        { mensagem_id: m.id, cpf: meuCpf, recebido_em: now, lido_em: now },
+        unread.map(m => ({ mensagem_id: m.id, cpf: meuCpf, recebido_em: now, lido_em: now })),
         { onConflict: "mensagem_id,cpf" }
       );
     }
