@@ -214,6 +214,29 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: true, ...userData });
     }
 
+    // --- Google login (match email to CPF) ---
+    if (action === "google-login") {
+      const { email: googleEmail } = await req.json().catch(() => ({}));
+      if (!googleEmail) return jsonResponse({ error: "E-mail não informado" }, 400);
+
+      const { data: admissaoByEmail } = await supabase
+        .from("admissoes")
+        .select("cpf, nome_completo")
+        .eq("email", googleEmail.toLowerCase().trim())
+        .maybeSingle();
+
+      if (!admissaoByEmail) {
+        return jsonResponse({ error: "Nenhum funcionário encontrado com este e-mail. Verifique se seu e-mail está cadastrado na ficha de admissão." }, 404);
+      }
+
+      const foundCpf = admissaoByEmail.cpf.replace(/[^0-9]/g, "");
+      const selectedAno = ano || new Date().getFullYear();
+      const userData = await getUserData(supabase, foundCpf, selectedAno);
+      if (!userData) return jsonResponse({ error: "Beneficiário não encontrado" }, 404);
+
+      return jsonResponse({ success: true, ...userData });
+    }
+
     // --- Admin view (impersonation) / Login ---
     if (action === "login" || action === "admin-view") {
       if (action === "admin-view") {

@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable/index";
 import { NavLink } from "@/components/NavLink";
 import { PortalContracheques } from "@/components/portal/PortalContracheques";
 import { PortalEPIs } from "@/components/portal/PortalEPIs";
