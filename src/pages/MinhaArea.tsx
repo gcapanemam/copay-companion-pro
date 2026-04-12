@@ -18,6 +18,16 @@ import { PortalMeusDados } from "@/components/portal/PortalMeusDados";
 import { PortalComunicados } from "@/components/portal/PortalComunicados";
 import { ChatContainer } from "@/components/chat/ChatContainer";
 import { PortalTarefas } from "@/components/portal/PortalTarefas";
+import { useUnreadCounts } from "@/hooks/useUnreadCounts";
+
+const BadgeCount = ({ count }: { count: number }) => {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-1 bg-destructive text-destructive-foreground text-[10px] rounded-full h-5 min-w-[20px] inline-flex items-center justify-center px-1 font-bold">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+};
 
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const HAPVIDA_CNPJ = "63.554.067/0001-98";
@@ -47,6 +57,7 @@ const MinhaArea = () => {
   const [admissao, setAdmissao] = useState<any>(null);
   const [showIR, setShowIR] = useState(false);
   const { toast } = useToast();
+  const unreadCounts = useUnreadCounts({ cpf: userCpf, departamento: admissao?.departamento, unidade: admissao?.unidade });
 
   // Admin impersonation: auto-login when admin_cpf is in URL
   useEffect(() => {
@@ -259,9 +270,9 @@ const MinhaArea = () => {
             <TabsTrigger value="epis" className="flex items-center gap-1"><ShieldCheck className="h-4 w-4" />EPIs</TabsTrigger>
             <TabsTrigger value="vt" className="flex items-center gap-1"><Bus className="h-4 w-4" />VT</TabsTrigger>
             <TabsTrigger value="faltas" className="flex items-center gap-1"><CalendarX className="h-4 w-4" />Ponto</TabsTrigger>
-            <TabsTrigger value="comunicados" className="flex items-center gap-1"><Megaphone className="h-4 w-4" />Comunicados</TabsTrigger>
-            <TabsTrigger value="tarefas" className="flex items-center gap-1"><ListTodo className="h-4 w-4" />Tarefas</TabsTrigger>
-            <TabsTrigger value="chat" className="flex items-center gap-1"><MessageCircle className="h-4 w-4" />Chat</TabsTrigger>
+            <TabsTrigger value="comunicados" className="flex items-center gap-1"><Megaphone className="h-4 w-4" />Comunicados<BadgeCount count={unreadCounts.comunicados} /></TabsTrigger>
+            <TabsTrigger value="tarefas" className="flex items-center gap-1"><ListTodo className="h-4 w-4" />Tarefas<BadgeCount count={unreadCounts.tarefas} /></TabsTrigger>
+            <TabsTrigger value="chat" className="flex items-center gap-1"><MessageCircle className="h-4 w-4" />Chat<BadgeCount count={unreadCounts.chat} /></TabsTrigger>
           </TabsList>
 
           <TabsContent value="dados">
