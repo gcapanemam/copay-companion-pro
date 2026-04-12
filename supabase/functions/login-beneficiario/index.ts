@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const { action, cpf, senha, ano, codigo, email: googleEmail } = await req.json();
+    const { action, cpf, senha, ano, codigo, email: googleEmail, valor } = await req.json();
 
     // --- Check 2FA config ---
     if (action === "check-2fa-config") {
@@ -135,7 +135,6 @@ Deno.serve(async (req) => {
       const { data: { user }, error: authError } = await supabase.auth.getUser(token);
       if (authError || !user) return jsonResponse({ error: "Não autorizado" }, 401);
 
-      const { valor } = await req.json().catch(() => ({}));
       const newValue = valor !== undefined ? String(valor) : "false";
       
       const { error } = await supabase
