@@ -234,7 +234,7 @@ const MinhaArea = () => {
     }
   };
 
-
+  const handleResend2FA = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("login-beneficiario", {
