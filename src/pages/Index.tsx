@@ -62,7 +62,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="container mx-auto px-4 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Activity className="h-6 w-6 text-primary" />
             <h1 className="text-xl font-bold text-foreground">Portal RH - Admin</h1>
@@ -81,42 +81,42 @@ const Index = () => {
 
       <main className="container mx-auto px-4 py-6">
         <Tabs defaultValue="dashboard" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-12">
-            <TabsTrigger value="dashboard" className="flex items-center gap-1">
-              <LayoutDashboard className="h-4 w-4" />Dashboard
+          <TabsList className="flex w-full overflow-x-auto justify-start md:grid md:grid-cols-12 h-auto p-1">
+            <TabsTrigger value="dashboard" className="flex items-center gap-1 shrink-0">
+              <LayoutDashboard className="h-4 w-4" /><span className="hidden md:inline">Dashboard</span>
             </TabsTrigger>
-            <TabsTrigger value="plano" className="flex items-center gap-1">
-              <Heart className="h-4 w-4" />Plano
+            <TabsTrigger value="plano" className="flex items-center gap-1 shrink-0">
+              <Heart className="h-4 w-4" /><span className="hidden md:inline">Plano</span>
             </TabsTrigger>
-            <TabsTrigger value="funcionarios" className="flex items-center gap-1">
-              <Users className="h-4 w-4" />Funcionários
+            <TabsTrigger value="funcionarios" className="flex items-center gap-1 shrink-0">
+              <Users className="h-4 w-4" /><span className="hidden md:inline">Funcionários</span>
             </TabsTrigger>
-            <TabsTrigger value="contracheques" className="flex items-center gap-1">
-              <FileText className="h-4 w-4" />Contracheques
+            <TabsTrigger value="contracheques" className="flex items-center gap-1 shrink-0">
+              <FileText className="h-4 w-4" /><span className="hidden md:inline">Contracheques</span>
             </TabsTrigger>
-            <TabsTrigger value="epis" className="flex items-center gap-1">
-              <ShieldCheck className="h-4 w-4" />EPIs
+            <TabsTrigger value="epis" className="flex items-center gap-1 shrink-0">
+              <ShieldCheck className="h-4 w-4" /><span className="hidden md:inline">EPIs</span>
             </TabsTrigger>
-            <TabsTrigger value="vt" className="flex items-center gap-1">
-              <Bus className="h-4 w-4" />VT
+            <TabsTrigger value="vt" className="flex items-center gap-1 shrink-0">
+              <Bus className="h-4 w-4" /><span className="hidden md:inline">VT</span>
             </TabsTrigger>
-            <TabsTrigger value="faltas" className="flex items-center gap-1">
-              <CalendarX className="h-4 w-4" />Ponto
+            <TabsTrigger value="faltas" className="flex items-center gap-1 shrink-0">
+              <CalendarX className="h-4 w-4" /><span className="hidden md:inline">Ponto</span>
             </TabsTrigger>
-            <TabsTrigger value="comunicados" className="flex items-center gap-1">
-              <Megaphone className="h-4 w-4" />Comunicados
+            <TabsTrigger value="comunicados" className="flex items-center gap-1 shrink-0">
+              <Megaphone className="h-4 w-4" /><span className="hidden md:inline">Comunicados</span>
             </TabsTrigger>
-            <TabsTrigger value="chat" className="flex items-center gap-1">
-              <MessageCircle className="h-4 w-4" />Chat<BadgeCount count={unreadCounts.chat} />
+            <TabsTrigger value="chat" className="flex items-center gap-1 shrink-0">
+              <MessageCircle className="h-4 w-4" /><span className="hidden md:inline">Chat</span><BadgeCount count={unreadCounts.chat} />
             </TabsTrigger>
-            <TabsTrigger value="tarefas" className="flex items-center gap-1">
-              <ListTodo className="h-4 w-4" />Tarefas<BadgeCount count={unreadCounts.tarefas} />
+            <TabsTrigger value="tarefas" className="flex items-center gap-1 shrink-0">
+              <ListTodo className="h-4 w-4" /><span className="hidden md:inline">Tarefas</span><BadgeCount count={unreadCounts.tarefas} />
             </TabsTrigger>
-            <TabsTrigger value="admissao" className="flex items-center gap-1">
-              <ClipboardList className="h-4 w-4" />Admissão
+            <TabsTrigger value="admissao" className="flex items-center gap-1 shrink-0">
+              <ClipboardList className="h-4 w-4" /><span className="hidden md:inline">Admissão</span>
             </TabsTrigger>
-            <TabsTrigger value="configuracoes" className="flex items-center gap-1">
-              <Settings className="h-4 w-4" />Config
+            <TabsTrigger value="configuracoes" className="flex items-center gap-1 shrink-0">
+              <Settings className="h-4 w-4" /><span className="hidden md:inline">Config</span>
             </TabsTrigger>
           </TabsList>
 
