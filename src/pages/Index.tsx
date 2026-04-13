@@ -85,23 +85,23 @@ const Index = () => {
             <TabsTrigger value="dashboard" className="flex items-center gap-1 shrink-0">
               <LayoutDashboard className="h-4 w-4" /><span className="hidden md:inline">Dashboard</span>
             </TabsTrigger>
-            <TabsTrigger value="plano" className="flex items-center gap-1 shrink-0">
-              <Heart className="h-4 w-4" /><span className="hidden md:inline">Plano</span>
-            </TabsTrigger>
             <TabsTrigger value="funcionarios" className="flex items-center gap-1 shrink-0">
               <Users className="h-4 w-4" /><span className="hidden md:inline">Funcionários</span>
             </TabsTrigger>
             <TabsTrigger value="contracheques" className="flex items-center gap-1 shrink-0">
               <FileText className="h-4 w-4" /><span className="hidden md:inline">Contracheques</span>
             </TabsTrigger>
-            <TabsTrigger value="epis" className="flex items-center gap-1 shrink-0">
-              <ShieldCheck className="h-4 w-4" /><span className="hidden md:inline">EPIs</span>
-            </TabsTrigger>
             <TabsTrigger value="vt" className="flex items-center gap-1 shrink-0">
               <Bus className="h-4 w-4" /><span className="hidden md:inline">VT</span>
             </TabsTrigger>
             <TabsTrigger value="faltas" className="flex items-center gap-1 shrink-0">
               <CalendarX className="h-4 w-4" /><span className="hidden md:inline">Ponto</span>
+            </TabsTrigger>
+            <TabsTrigger value="plano" className="flex items-center gap-1 shrink-0">
+              <Heart className="h-4 w-4" /><span className="hidden md:inline">Plano</span>
+            </TabsTrigger>
+            <TabsTrigger value="epis" className="flex items-center gap-1 shrink-0">
+              <ShieldCheck className="h-4 w-4" /><span className="hidden md:inline">EPIs</span>
             </TabsTrigger>
             <TabsTrigger value="comunicados" className="flex items-center gap-1 shrink-0">
               <Megaphone className="h-4 w-4" /><span className="hidden md:inline">Comunicados</span>
