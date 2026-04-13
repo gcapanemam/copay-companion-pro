@@ -2,7 +2,7 @@ import { useState } from "react";
 import { UploadArea } from "@/components/UploadArea";
 import { TabelaAnual } from "@/components/TabelaAnual";
 import { SeletorAno } from "@/components/SeletorAno";
-import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX, ClipboardList, Users, Megaphone, MessageCircle, ListTodo, Settings } from "lucide-react";
+import { Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus, CalendarX, ClipboardList, Users, Megaphone, MessageCircle, ListTodo, Settings, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +22,7 @@ import { AdminComunicados } from "@/components/admin/AdminComunicados";
 import { ChatContainer } from "@/components/chat/ChatContainer";
 import { AdminTarefas } from "@/components/admin/AdminTarefas";
 import { AdminConfiguracoes } from "@/components/admin/AdminConfiguracoes";
+import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 
 const BadgeCount = ({ count }: { count: number }) => {
@@ -79,8 +80,11 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-6">
-        <Tabs defaultValue="plano" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-11">
+        <Tabs defaultValue="dashboard" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-12">
+            <TabsTrigger value="dashboard" className="flex items-center gap-1">
+              <LayoutDashboard className="h-4 w-4" />Dashboard
+            </TabsTrigger>
             <TabsTrigger value="plano" className="flex items-center gap-1">
               <Heart className="h-4 w-4" />Plano
             </TabsTrigger>
@@ -115,6 +119,10 @@ const Index = () => {
               <Settings className="h-4 w-4" />Config
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="dashboard">
+            <AdminDashboard />
+          </TabsContent>
 
           <TabsContent value="plano" className="space-y-6">
             <div className="flex items-center justify-between">
