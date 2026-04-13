@@ -124,6 +124,22 @@ const Index = () => {
             <AdminDashboard />
           </TabsContent>
 
+          <TabsContent value="funcionarios">
+            <AdminFuncionarios />
+          </TabsContent>
+
+          <TabsContent value="contracheques">
+            <AdminContracheques />
+          </TabsContent>
+
+          <TabsContent value="vt">
+            <AdminValeTransporte />
+          </TabsContent>
+
+          <TabsContent value="faltas">
+            <AdminFaltas />
+          </TabsContent>
+
           <TabsContent value="plano" className="space-y-6">
             <div className="flex items-center justify-between">
               <SeletorAno ano={ano} onAnoChange={setAno} />
@@ -153,24 +169,8 @@ const Index = () => {
             <TabelaAnual ano={ano} refreshKey={refreshKey} />
           </TabsContent>
 
-          <TabsContent value="funcionarios">
-            <AdminFuncionarios />
-          </TabsContent>
-
-          <TabsContent value="contracheques">
-            <AdminContracheques />
-          </TabsContent>
-
           <TabsContent value="epis">
             <AdminEPIs />
-          </TabsContent>
-
-          <TabsContent value="vt">
-            <AdminValeTransporte />
-          </TabsContent>
-
-          <TabsContent value="faltas">
-            <AdminFaltas />
           </TabsContent>
 
           <TabsContent value="comunicados">
