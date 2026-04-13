@@ -120,6 +120,10 @@ const Index = () => {
             </TabsTrigger>
           </TabsList>
 
+          <TabsContent value="dashboard">
+            <AdminDashboard />
+          </TabsContent>
+
           <TabsContent value="plano" className="space-y-6">
             <div className="flex items-center justify-between">
               <SeletorAno ano={ano} onAnoChange={setAno} />
