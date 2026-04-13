@@ -80,8 +80,11 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-6">
-        <Tabs defaultValue="plano" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-11">
+        <Tabs defaultValue="dashboard" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-12">
+            <TabsTrigger value="dashboard" className="flex items-center gap-1">
+              <LayoutDashboard className="h-4 w-4" />Dashboard
+            </TabsTrigger>
             <TabsTrigger value="plano" className="flex items-center gap-1">
               <Heart className="h-4 w-4" />Plano
             </TabsTrigger>
