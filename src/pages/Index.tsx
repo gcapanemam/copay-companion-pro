@@ -22,6 +22,7 @@ import { AdminComunicados } from "@/components/admin/AdminComunicados";
 import { ChatContainer } from "@/components/chat/ChatContainer";
 import { AdminTarefas } from "@/components/admin/AdminTarefas";
 import { AdminConfiguracoes } from "@/components/admin/AdminConfiguracoes";
+import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 
 const BadgeCount = ({ count }: { count: number }) => {
