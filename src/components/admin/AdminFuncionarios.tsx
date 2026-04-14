@@ -27,6 +27,12 @@ function getInitials(name: string) {
   return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 }
 
+function normalizeCpf(value: unknown) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits || digits.length > 11) return "";
+  return digits.padStart(11, "0");
+}
+
 export function AdminFuncionarios() {
   const [filtroUnidade, setFiltroUnidade] = useState("__all__");
   const [filtroDepartamento, setFiltroDepartamento] = useState("__all__");
@@ -56,8 +62,8 @@ export function AdminFuncionarios() {
   });
 
   const formatCpf = (v: string) => {
-    if (!v) return "";
-    const n = v.replace(/\D/g, "").slice(0, 11);
+    const n = normalizeCpf(v);
+    if (!n) return "";
     if (n.length <= 3) return n;
     if (n.length <= 6) return `${n.slice(0, 3)}.${n.slice(3)}`;
     if (n.length <= 9) return `${n.slice(0, 3)}.${n.slice(3, 6)}.${n.slice(6)}`;
@@ -67,12 +73,12 @@ export function AdminFuncionarios() {
   const funcionarios = (() => {
     const map = new Map<string, any>();
     (titulares || []).forEach((t) => {
-      const cpf = t.cpf?.replace(/\D/g, "") || "";
+      const cpf = normalizeCpf(t.cpf);
       if (cpf) map.set(cpf, { nome: t.nome, cpf, origem: "Plano de Saúde", dados: {}, titularId: t.id });
     });
     (admissoes || []).forEach((a) => {
       const dados = (a.dados || {}) as Record<string, any>;
-      const cpf = (dados.cpf || a.cpf || "").replace(/\D/g, "");
+      const cpf = normalizeCpf(a.cpf) || normalizeCpf(dados.cpf);
       const nome = dados.nome_completo || a.nome_completo || "";
       if (!cpf) return;
       if (map.has(cpf)) {

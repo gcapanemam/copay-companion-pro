@@ -8,8 +8,10 @@ interface PortalMeusDadosProps {
 }
 
 const formatCpf = (cpf: string) => {
-  if (!cpf || cpf.length !== 11) return cpf;
-  return `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
+  const digits = cpf.replace(/\D/g, "");
+  if (!digits || digits.length > 11) return cpf;
+  const normalized = digits.padStart(11, "0");
+  return `${normalized.slice(0, 3)}.${normalized.slice(3, 6)}.${normalized.slice(6, 9)}-${normalized.slice(9)}`;
 };
 
 const Field = ({ label, value }: { label: string; value: string | null | undefined }) => {
