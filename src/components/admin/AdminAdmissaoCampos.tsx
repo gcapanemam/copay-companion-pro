@@ -26,6 +26,12 @@ const TIPOS = [
 
 const EMPTY_CAMPO = { campo_nome: "", label: "", tipo: "text", opcoes: "", obrigatorio: false, grupo: "Geral", placeholder: "" };
 
+const normalizeCpf = (value: unknown) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits || digits.length > 11) return "";
+  return digits.padStart(11, "0");
+};
+
 export function AdminAdmissaoCampos() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -161,13 +167,15 @@ export function AdminAdmissaoCampos() {
     "Tenho interesse no seguinte plano: obs: o plano escolhido pelo funcionário deve ser o mesmo para seus dependentes.": "plano_escolhido",
   };
 
+  const RESERVED_IMPORT_FIELDS = new Set(Object.values(COLUMN_MAP));
+
   const handleUploadAdmissao = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data);
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows: any[] = XLSX.utils.sheet_to_json(ws);
+    const rows: any[] = XLSX.utils.sheet_to_json(ws, { raw: true, defval: "" });
     let count = 0;
     for (const row of rows) {
       const dados: Record<string, any> = {};
@@ -176,18 +184,25 @@ export function AdminAdmissaoCampos() {
         if (header === "Carimbo de data/hora") continue;
         const fieldName = COLUMN_MAP[header];
         if (fieldName) {
+          if (fieldName === "cpf") {
+            cpfVal = normalizeCpf(value);
+            dados[fieldName] = cpfVal;
+            continue;
+          }
+
           const strVal = String(value || "");
           if (fieldName === "nome_completo") nomeCompleto = strVal;
-          if (fieldName === "cpf") cpfVal = strVal.replace(/\D/g, "");
           if (fieldName === "primeiro_emprego" || fieldName === "vale_transporte") {
             dados[fieldName] = strVal.toLowerCase().includes("sim");
           } else { dados[fieldName] = strVal; }
         } else {
           const slug = header.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60);
-          if (slug) dados[slug] = String(value || "");
+          if (!slug || RESERVED_IMPORT_FIELDS.has(slug)) continue;
+          dados[slug] = String(value || "");
         }
       }
       if (!nomeCompleto || !cpfVal) continue;
+      dados.cpf = cpfVal;
       await supabase.from("admissoes").insert({ nome_completo: nomeCompleto, cpf: cpfVal, dados });
       count++;
     }
@@ -199,8 +214,8 @@ export function AdminAdmissaoCampos() {
   const grupos = campos ? [...new Set(campos.map((c) => c.grupo))] : [];
 
   const formatCpf = (v: string) => {
-    if (!v) return "";
-    const n = v.replace(/\D/g, "").slice(0, 11);
+    const n = normalizeCpf(v);
+    if (!n) return "";
     if (n.length <= 3) return n;
     if (n.length <= 6) return `${n.slice(0,3)}.${n.slice(3)}`;
     if (n.length <= 9) return `${n.slice(0,3)}.${n.slice(3,6)}.${n.slice(6)}`;
@@ -353,11 +368,12 @@ export function AdminAdmissaoCampos() {
               <TableBody>
                 {admissoes.map((a) => {
                   const dados = (a.dados || {}) as Record<string, any>;
+                  const cpf = normalizeCpf(a.cpf) || normalizeCpf(dados.cpf);
                   return (
                     <TableRow key={a.id}>
                       <TableCell>{new Date(a.created_at).toLocaleDateString("pt-BR")}</TableCell>
                       <TableCell>{dados.nome_completo || a.nome_completo || "-"}</TableCell>
-                      <TableCell>{formatCpf(dados.cpf || a.cpf || "")}</TableCell>
+                      <TableCell>{formatCpf(cpf)}</TableCell>
                       <TableCell>{dados.funcao || a.funcao || "-"}</TableCell>
                       <TableCell>{dados.unidade || a.unidade || "-"}</TableCell>
                     </TableRow>

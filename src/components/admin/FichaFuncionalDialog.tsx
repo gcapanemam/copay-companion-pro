@@ -17,9 +17,15 @@ function getInitials(name: string) {
   return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 }
 
+function normalizeCpf(value: unknown) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits || digits.length > 11) return "";
+  return digits.padStart(11, "0");
+}
+
 function formatCpfDisplay(v: string) {
-  if (!v) return "";
-  const n = v.replace(/\D/g, "").slice(0, 11);
+  const n = normalizeCpf(v);
+  if (!n) return "";
   if (n.length <= 3) return n;
   if (n.length <= 6) return `${n.slice(0, 3)}.${n.slice(3)}`;
   if (n.length <= 9) return `${n.slice(0, 3)}.${n.slice(3, 6)}.${n.slice(6)}`;
@@ -119,7 +125,12 @@ export function FichaFuncionalDialog({ funcionario, open, onClose }: FichaFuncio
       // Merge fixed fields
       FIXED_FIELDS.forEach(group => {
         group.fields.forEach(f => {
-          merged[f.key] = d[f.key] ?? a[f.key] ?? "";
+          if (f.key === "cpf") {
+            merged[f.key] = normalizeCpf(a[f.key]) || normalizeCpf(d[f.key]) || "";
+            return;
+          }
+
+          merged[f.key] = a[f.key] ?? d[f.key] ?? "";
         });
       });
 
@@ -179,16 +190,20 @@ export function FichaFuncionalDialog({ funcionario, open, onClose }: FichaFuncio
       const dadosUpdate: Record<string, any> = {};
 
       Object.entries(formData).forEach(([key, value]) => {
+        const normalizedCpf = key === "cpf" ? normalizeCpf(value) : value;
+
         if (FIXED_KEYS.has(key)) {
           // Boolean fields
           if (key === "primeiro_emprego" || key === "vale_transporte") {
             fixedUpdate[key] = value === true || value === "true" || value === "sim";
+          } else if (key === "cpf") {
+            fixedUpdate[key] = normalizedCpf || null;
           } else {
             fixedUpdate[key] = value || null;
           }
         }
         // All fields go into dados too for compatibility
-        dadosUpdate[key] = value;
+        dadosUpdate[key] = normalizedCpf;
       });
 
       fixedUpdate.dados = dadosUpdate;
