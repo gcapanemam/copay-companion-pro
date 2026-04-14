@@ -235,6 +235,14 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: true, ...userData });
     }
 
+    // --- Reload data (year change, no re-auth needed) ---
+    if (action === "reload-data") {
+      const selectedAno = ano || new Date().getFullYear();
+      const userData = await getUserData(supabase, cleanCpf, selectedAno);
+      if (!userData) return jsonResponse({ error: "Beneficiário não encontrado" }, 404);
+      return jsonResponse({ success: true, ...userData });
+    }
+
     // --- Admin view (impersonation) / Login ---
     if (action === "login" || action === "admin-view") {
       if (action === "admin-view") {

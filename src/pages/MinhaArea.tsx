@@ -256,7 +256,7 @@ const MinhaArea = () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("login-beneficiario", {
-        body: { action: isAdminView ? "admin-view" : "login", cpf: userCpf, senha, ano: selectedAno },
+        body: { action: "reload-data", cpf: userCpf, ano: selectedAno },
       });
       if (error) throw error;
       if (!data.error) {
