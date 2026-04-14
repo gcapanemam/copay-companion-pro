@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
@@ -8,8 +8,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Loader2, Search, Users, Eye } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2, Search, Users, Eye, Trash2 } from "lucide-react";
 import { FichaFuncionalDialog } from "./FichaFuncionalDialog";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 function getInitials(name: string) {
   return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
@@ -20,6 +32,10 @@ export function AdminFuncionarios() {
   const [filtroDepartamento, setFiltroDepartamento] = useState("__all__");
   const [busca, setBusca] = useState("");
   const [selected, setSelected] = useState<any>(null);
+  const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: admissoes, isLoading: loadingAdmissoes } = useQuery({
     queryKey: ["admin-admissoes-func"],
@@ -52,7 +68,7 @@ export function AdminFuncionarios() {
     const map = new Map<string, any>();
     (titulares || []).forEach((t) => {
       const cpf = t.cpf?.replace(/\D/g, "") || "";
-      if (cpf) map.set(cpf, { nome: t.nome, cpf, origem: "Plano de Saúde", dados: {} });
+      if (cpf) map.set(cpf, { nome: t.nome, cpf, origem: "Plano de Saúde", dados: {}, titularId: t.id });
     });
     (admissoes || []).forEach((a) => {
       const dados = (a.dados || {}) as Record<string, any>;
@@ -91,15 +107,78 @@ export function AdminFuncionarios() {
     return data?.publicUrl || null;
   };
 
+  const toggleCpf = (cpf: string) => {
+    setSelectedCpfs(prev => {
+      const next = new Set(prev);
+      if (next.has(cpf)) next.delete(cpf);
+      else next.add(cpf);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedCpfs.size === filtered.length) {
+      setSelectedCpfs(new Set());
+    } else {
+      setSelectedCpfs(new Set(filtered.map(f => f.cpf)));
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const cpfsToDelete = Array.from(selectedCpfs);
+
+      // Find which funcionarios to delete and from which tables
+      const funcsToDelete = funcionarios.filter(f => cpfsToDelete.includes(f.cpf));
+
+      for (const func of funcsToDelete) {
+        // Delete from admissoes if exists
+        if (func.admissao) {
+          const { error } = await supabase.from("admissoes").delete().eq("id", func.admissao.id);
+          if (error) throw error;
+        }
+        // Delete from titulares if exists
+        if (func.titularId) {
+          // Delete dependentes first
+          await supabase.from("dependentes").delete().eq("titular_id", func.titularId);
+          const { error } = await supabase.from("titulares").delete().eq("id", func.titularId);
+          if (error) throw error;
+        }
+      }
+
+      toast.success(`${cpfsToDelete.length} funcionário(s) excluído(s) com sucesso.`);
+      setSelectedCpfs(new Set());
+      queryClient.invalidateQueries({ queryKey: ["admin-admissoes-func"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-titulares-func"] });
+    } catch (err: any) {
+      toast.error("Erro ao excluir: " + (err.message || "Tente novamente."));
+    } finally {
+      setDeleting(false);
+      setShowDeleteDialog(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
             <CardTitle>Funcionários ({filtered.length})</CardTitle>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
+            {selectedCpfs.size > 0 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowDeleteDialog(true)}
+                className="gap-1"
+              >
+                <Trash2 className="h-4 w-4" />
+                Excluir ({selectedCpfs.size})
+              </Button>
+            )}
             <div className="relative w-56">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Buscar nome ou CPF..." value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-9" />
@@ -130,6 +209,12 @@ export function AdminFuncionarios() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={filtered.length > 0 && selectedCpfs.size === filtered.length}
+                        onCheckedChange={toggleAll}
+                      />
+                    </TableHead>
                     <TableHead className="w-12"></TableHead>
                     <TableHead>Nome</TableHead>
                     <TableHead>CPF</TableHead>
@@ -145,6 +230,12 @@ export function AdminFuncionarios() {
                     const foto = getFotoUrl(f);
                     return (
                       <TableRow key={f.cpf} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelected(f)}>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedCpfs.has(f.cpf)}
+                            onCheckedChange={() => toggleCpf(f.cpf)}
+                          />
+                        </TableCell>
                         <TableCell>
                           <Avatar className="h-8 w-8">
                             {foto && <AvatarImage src={foto} />}
@@ -188,6 +279,25 @@ export function AdminFuncionarios() {
         open={!!selected}
         onClose={() => setSelected(null)}
       />
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir {selectedCpfs.size} funcionário(s)? Esta ação não pode ser desfeita.
+              Os registros serão removidos das tabelas de admissão e plano de saúde.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
