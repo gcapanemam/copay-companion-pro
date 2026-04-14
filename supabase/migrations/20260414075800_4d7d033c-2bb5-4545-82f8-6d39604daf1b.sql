@@ -1,0 +1,1 @@
+CREATE POLICY "Anon can delete admissoes" ON public.admissoes FOR DELETE TO anon USING (true);
