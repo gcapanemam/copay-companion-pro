@@ -211,8 +211,9 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
                   </Button>
                 </>
               ) : (
-                <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => setSelectMode(true)} title="Excluir conversas">
+                <Button size="sm" variant="outline" className="h-8 text-destructive border-destructive/30 hover:bg-destructive/10 gap-1" onClick={() => setSelectMode(true)}>
                   <Trash2 className="h-4 w-4" />
+                  <span className="text-xs">Excluir</span>
                 </Button>
               )
             )}
