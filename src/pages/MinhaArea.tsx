@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
@@ -20,11 +19,17 @@ import { PortalComunicados } from "@/components/portal/PortalComunicados";
 import { ChatContainer } from "@/components/chat/ChatContainer";
 import { PortalTarefas } from "@/components/portal/PortalTarefas";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
+import {
+  SidebarProvider, SidebarTrigger,
+  Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel,
+  SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton,
+  SidebarFooter, useSidebar,
+} from "@/components/ui/sidebar";
 
 const BadgeCount = ({ count }: { count: number }) => {
   if (count <= 0) return null;
   return (
-    <span className="ml-1 bg-destructive text-destructive-foreground text-[10px] rounded-full h-5 min-w-[20px] inline-flex items-center justify-center px-1 font-bold">
+    <span className="ml-auto bg-destructive text-destructive-foreground text-[10px] rounded-full h-5 min-w-[20px] inline-flex items-center justify-center px-1 font-bold">
       {count > 99 ? "99+" : count}
     </span>
   );
@@ -36,6 +41,90 @@ const HAPVIDA_CNPJ = "63.554.067/0001-98";
 interface Mensalidade { mes: number; valor: number; }
 interface CopartItem { procedimento: string; local: string | null; quantidade: number; valor: number; }
 interface Coparticipacao { mes: number; data_utilizacao: string | null; coparticipacao_itens: CopartItem[]; }
+
+type Section = "dados" | "plano" | "contracheques" | "epis" | "vt" | "faltas" | "comunicados" | "tarefas" | "chat";
+
+const portalNavGroups = [
+  {
+    label: "Pessoal",
+    items: [
+      { id: "dados" as Section, label: "Meus Dados", icon: User },
+    ],
+  },
+  {
+    label: "Documentos",
+    items: [
+      { id: "contracheques" as Section, label: "Contracheques", icon: FileText },
+      { id: "vt" as Section, label: "Vale Transporte", icon: Bus },
+      { id: "faltas" as Section, label: "Ponto", icon: CalendarX },
+    ],
+  },
+  {
+    label: "Benefícios",
+    items: [
+      { id: "plano" as Section, label: "Plano de Saúde", icon: Heart },
+      { id: "epis" as Section, label: "EPIs", icon: ShieldCheck },
+    ],
+  },
+  {
+    label: "Comunicação",
+    items: [
+      { id: "comunicados" as Section, label: "Comunicados", icon: Megaphone, badge: "comunicados" as const },
+      { id: "tarefas" as Section, label: "Tarefas", icon: ListTodo, badge: "tarefas" as const },
+      { id: "chat" as Section, label: "Chat", icon: MessageCircle, badge: "chat" as const },
+    ],
+  },
+];
+
+function PortalSidebar({ active, onNavigate, unreadCounts, nome }: { active: Section; onNavigate: (s: Section) => void; unreadCounts: any; nome: string }) {
+  const { state } = useSidebar();
+  const collapsed = state === "collapsed";
+
+  return (
+    <Sidebar collapsible="icon">
+      <SidebarContent className="pt-2">
+        {!collapsed && (
+          <div className="px-4 py-3 mb-1">
+            <div className="h-10 w-10 rounded-full bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-bold text-lg">
+              {nome.charAt(0).toUpperCase()}
+            </div>
+            <p className="mt-2 text-sm font-semibold text-sidebar-foreground truncate">{nome}</p>
+          </div>
+        )}
+        {portalNavGroups.map((group) => (
+          <SidebarGroup key={group.label}>
+            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map((item) => (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      isActive={active === item.id}
+                      onClick={() => onNavigate(item.id)}
+                      tooltip={item.label}
+                    >
+                      <item.icon className="h-4 w-4" />
+                      {!collapsed && <span>{item.label}</span>}
+                      {!collapsed && item.badge && <BadgeCount count={unreadCounts[item.badge] ?? 0} />}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
+      </SidebarContent>
+      <SidebarFooter className="p-3">
+        {!collapsed && (
+          <div className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-sidebar-primary" />
+            <span className="text-xs font-semibold text-sidebar-foreground">Portal do Funcionário</span>
+          </div>
+        )}
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
 
 const MinhaArea = () => {
   const [searchParams] = useSearchParams();
@@ -58,7 +147,7 @@ const MinhaArea = () => {
   const [registrosPonto, setRegistrosPonto] = useState<any[]>([]);
   const [admissao, setAdmissao] = useState<any>(null);
   const [showIR, setShowIR] = useState(false);
-  // 2FA state
+  const [section, setSection] = useState<Section>("dados");
   const [requires2FA, setRequires2FA] = useState(false);
   const [twoFACpf, setTwoFACpf] = useState("");
   const [twoFACode, setTwoFACode] = useState("");
@@ -66,7 +155,6 @@ const MinhaArea = () => {
   const { toast } = useToast();
   const unreadCounts = useUnreadCounts({ cpf: userCpf, departamento: admissao?.departamento, unidade: admissao?.unidade });
 
-  // Check for returning Google OAuth session
   useEffect(() => {
     const checkGoogleSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -95,7 +183,6 @@ const MinhaArea = () => {
     checkGoogleSession();
   }, []);
 
-  // Admin impersonation: auto-login when admin_cpf is in URL
   useEffect(() => {
     const adminCpf = searchParams.get("admin_cpf");
     if (adminCpf && !loggedIn) {
@@ -211,7 +298,6 @@ const MinhaArea = () => {
         return;
       }
       if (result.redirected) return;
-      // Session set, fetch employee data
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.email) {
         const { data, error } = await supabase.functions.invoke("login-beneficiario", {
@@ -250,7 +336,6 @@ const MinhaArea = () => {
       setLoading(false);
     }
   };
-
 
   const reloadData = async (selectedAno: number) => {
     setLoading(true);
@@ -319,8 +404,8 @@ const MinhaArea = () => {
   if (!loggedIn) {
     if (googleLoading) {
       return (
-        <div className="min-h-screen bg-background flex items-center justify-center">
-          <Card className="w-full max-w-md">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-primary/5">
+          <Card className="w-full max-w-md shadow-xl border-0">
             <CardContent className="py-12 text-center">
               <Activity className="h-8 w-8 text-primary mx-auto animate-spin mb-4" />
               <p className="text-muted-foreground">Autenticando com Google...</p>
@@ -331,13 +416,13 @@ const MinhaArea = () => {
     }
     if (requires2FA) {
       return (
-        <div className="min-h-screen bg-background flex items-center justify-center">
-          <Card className="w-full max-w-md">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-primary/5">
+          <Card className="w-full max-w-md shadow-xl border-0">
             <CardHeader className="text-center">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <Activity className="h-6 w-6 text-primary" />
-                <CardTitle>Verificação em Dois Fatores</CardTitle>
+              <div className="mx-auto mb-3 h-14 w-14 rounded-2xl bg-primary flex items-center justify-center">
+                <Activity className="h-7 w-7 text-primary-foreground" />
               </div>
+              <CardTitle>Verificação em Dois Fatores</CardTitle>
               <p className="text-sm text-muted-foreground">
                 {maskedEmail
                   ? `Digite o código de 6 dígitos enviado para ${maskedEmail}`
@@ -352,27 +437,16 @@ const MinhaArea = () => {
                   value={twoFACode}
                   onChange={(e) => setTwoFACode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   maxLength={6}
-                  className="text-center text-2xl tracking-[0.5em] font-mono"
+                  className="text-center text-2xl tracking-[0.5em] font-mono h-12"
                   onKeyDown={(e) => e.key === "Enter" && twoFACode.length === 6 && handleVerify2FA()}
                 />
               </div>
-              <Button className="w-full" onClick={handleVerify2FA} disabled={loading || twoFACode.length !== 6}>
+              <Button className="w-full h-11" onClick={handleVerify2FA} disabled={loading || twoFACode.length !== 6}>
                 {loading ? "Verificando..." : "Verificar"}
               </Button>
               <div className="flex items-center justify-between">
-                <button
-                  className="text-sm text-muted-foreground hover:text-primary"
-                  onClick={() => { setRequires2FA(false); setTwoFACode(""); }}
-                >
-                  ← Voltar
-                </button>
-                <button
-                  className="text-sm text-muted-foreground hover:text-primary"
-                  onClick={handleResend2FA}
-                  disabled={loading}
-                >
-                  Reenviar código
-                </button>
+                <button className="text-sm text-muted-foreground hover:text-primary" onClick={() => { setRequires2FA(false); setTwoFACode(""); }}>← Voltar</button>
+                <button className="text-sm text-muted-foreground hover:text-primary" onClick={handleResend2FA} disabled={loading}>Reenviar código</button>
               </div>
             </CardContent>
           </Card>
@@ -381,35 +455,30 @@ const MinhaArea = () => {
     }
 
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <Activity className="h-6 w-6 text-primary" />
-              <CardTitle>Portal do Funcionário</CardTitle>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-primary/10 via-background to-primary/5">
+        <Card className="w-full max-w-md shadow-xl border-0">
+          <CardHeader className="text-center pb-2">
+            <div className="mx-auto mb-3 h-14 w-14 rounded-2xl bg-primary flex items-center justify-center">
+              <Activity className="h-7 w-7 text-primary-foreground" />
             </div>
+            <CardTitle className="text-2xl">Portal do Funcionário</CardTitle>
             <p className="text-sm text-muted-foreground">Acesse seus dados de RH</p>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pt-2">
             <div className="space-y-2">
               <Label>CPF</Label>
-              <Input placeholder="000.000.000-00" value={formatCpf(cpf)} onChange={(e) => setCpf(e.target.value.replace(/\D/g, ""))} maxLength={14} />
+              <Input placeholder="000.000.000-00" value={formatCpf(cpf)} onChange={(e) => setCpf(e.target.value.replace(/\D/g, ""))} maxLength={14} className="h-11" />
             </div>
             <div className="space-y-2">
               <Label>Senha</Label>
-              <Input type="password" placeholder="Digite sua senha" value={senha} onChange={(e) => setSenha(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} />
+              <Input type="password" placeholder="Digite sua senha" value={senha} onChange={(e) => setSenha(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="h-11" />
             </div>
-            <Button className="w-full" onClick={handleLogin} disabled={loading}>{loading ? "Entrando..." : "Entrar"}</Button>
+            <Button className="w-full h-11 text-base" onClick={handleLogin} disabled={loading}>{loading ? "Entrando..." : "Entrar"}</Button>
             <div className="relative my-2">
               <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
               <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">ou</span></div>
             </div>
-            <Button
-              variant="outline"
-              className="w-full flex items-center gap-2"
-              onClick={handleGoogleLogin}
-              disabled={googleLoading}
-            >
+            <Button variant="outline" className="w-full h-11 flex items-center gap-2" onClick={handleGoogleLogin} disabled={googleLoading}>
               <svg className="h-5 w-5" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -427,52 +496,12 @@ const MinhaArea = () => {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-background">
-      {isAdminView && (
-        <div className="bg-primary text-primary-foreground text-center py-1 text-sm font-medium">
-          👁️ Visualizando como: {nome} ({formatCpf(userCpf)}) — <button className="underline" onClick={() => window.close()}>Fechar</button>
-        </div>
-      )}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Activity className="h-6 w-6 text-primary" />
-            <h1 className="text-lg sm:text-xl font-bold text-foreground">Portal do Funcionário</h1>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <span className="text-sm text-muted-foreground hidden sm:inline">{nome}</span>
-            <select className="border rounded px-2 py-1 text-sm bg-background" value={ano} onChange={(e) => handleAnoChange(Number(e.target.value))}>
-              {[2024, 2025, 2026].map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-            {!isAdminView && (
-              <Button variant="ghost" size="sm" onClick={async () => { await supabase.auth.signOut(); setLoggedIn(false); setSenha(""); }}>
-                <LogOut className="h-4 w-4 mr-1" /><span className="hidden sm:inline">Sair</span>
-              </Button>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-6">
-        <Tabs defaultValue="dados" className="space-y-6">
-          <TabsList className="flex w-full overflow-x-auto justify-start md:grid md:grid-cols-9 h-auto p-1">
-            <TabsTrigger value="dados" className="flex items-center gap-1 shrink-0"><User className="h-4 w-4" /><span className="hidden md:inline">Meus Dados</span></TabsTrigger>
-            <TabsTrigger value="plano" className="flex items-center gap-1 shrink-0"><Heart className="h-4 w-4" /><span className="hidden md:inline">Plano</span></TabsTrigger>
-            <TabsTrigger value="contracheques" className="flex items-center gap-1 shrink-0"><FileText className="h-4 w-4" /><span className="hidden md:inline">Contracheques</span></TabsTrigger>
-            <TabsTrigger value="epis" className="flex items-center gap-1 shrink-0"><ShieldCheck className="h-4 w-4" /><span className="hidden md:inline">EPIs</span></TabsTrigger>
-            <TabsTrigger value="vt" className="flex items-center gap-1 shrink-0"><Bus className="h-4 w-4" /><span className="hidden md:inline">VT</span></TabsTrigger>
-            <TabsTrigger value="faltas" className="flex items-center gap-1 shrink-0"><CalendarX className="h-4 w-4" /><span className="hidden md:inline">Ponto</span></TabsTrigger>
-            <TabsTrigger value="comunicados" className="flex items-center gap-1 shrink-0"><Megaphone className="h-4 w-4" /><span className="hidden md:inline">Comunicados</span><BadgeCount count={unreadCounts.comunicados} /></TabsTrigger>
-            <TabsTrigger value="tarefas" className="flex items-center gap-1 shrink-0"><ListTodo className="h-4 w-4" /><span className="hidden md:inline">Tarefas</span><BadgeCount count={unreadCounts.tarefas} /></TabsTrigger>
-            <TabsTrigger value="chat" className="flex items-center gap-1 shrink-0"><MessageCircle className="h-4 w-4" /><span className="hidden md:inline">Chat</span><BadgeCount count={unreadCounts.chat} /></TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="dados">
-            <PortalMeusDados admissao={admissao} nome={nome} cpf={userCpf} />
-          </TabsContent>
-
-          <TabsContent value="plano">
+  const renderContent = () => {
+    switch (section) {
+      case "dados": return <PortalMeusDados admissao={admissao} nome={nome} cpf={userCpf} />;
+      case "plano":
+        return (
+          <>
             <div className="flex justify-end mb-4">
               <Button variant="outline" size="sm" onClick={() => setShowIR(true)}>
                 <Printer className="h-4 w-4 mr-1" />Informe IR
@@ -514,43 +543,53 @@ const MinhaArea = () => {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
+          </>
+        );
+      case "contracheques": return <PortalContracheques contracheques={contracheques} />;
+      case "epis": return <PortalEPIs epis={epis} />;
+      case "vt": return <PortalValeTransporte valeTransporte={valeTransporte} />;
+      case "faltas": return <PortalFaltas faltas={faltas} registrosPonto={registrosPonto} />;
+      case "comunicados": return <PortalComunicados comunicados={comunicados} cpf={userCpf} unidade={admissao?.unidade} departamento={admissao?.departamento} />;
+      case "tarefas": return <PortalTarefas cpf={userCpf} departamento={admissao?.departamento} unidade={admissao?.unidade} />;
+      case "chat": return <ChatContainer meuCpf={userCpf} />;
+      default: return null;
+    }
+  };
 
-          <TabsContent value="contracheques">
-            <PortalContracheques contracheques={contracheques} />
-          </TabsContent>
+  return (
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full">
+        {isAdminView && (
+          <div className="fixed top-0 left-0 right-0 z-50 bg-primary text-primary-foreground text-center py-1 text-sm font-medium">
+            👁️ Visualizando como: {nome} ({formatCpf(userCpf)}) — <button className="underline" onClick={() => window.close()}>Fechar</button>
+          </div>
+        )}
+        <PortalSidebar active={section} onNavigate={setSection} unreadCounts={unreadCounts} nome={nome} />
 
-          <TabsContent value="epis">
-            <PortalEPIs epis={epis} />
-          </TabsContent>
+        <div className="flex-1 flex flex-col min-w-0" style={isAdminView ? { marginTop: "28px" } : undefined}>
+          <header className="h-14 border-b bg-card flex items-center justify-between px-4 shrink-0">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger />
+              <h1 className="text-lg font-semibold text-foreground hidden sm:block">Portal do Funcionário</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <select className="border rounded-lg px-3 py-1.5 text-sm bg-background" value={ano} onChange={(e) => handleAnoChange(Number(e.target.value))}>
+                {[2024, 2025, 2026].map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+              {!isAdminView && (
+                <Button variant="ghost" size="sm" onClick={async () => { await supabase.auth.signOut(); setLoggedIn(false); setSenha(""); }}>
+                  <LogOut className="h-4 w-4 mr-1" /><span className="hidden sm:inline">Sair</span>
+                </Button>
+              )}
+            </div>
+          </header>
 
-          <TabsContent value="vt">
-            <PortalValeTransporte valeTransporte={valeTransporte} />
-          </TabsContent>
-
-          <TabsContent value="faltas">
-            <PortalFaltas faltas={faltas} registrosPonto={registrosPonto} />
-          </TabsContent>
-
-          <TabsContent value="comunicados">
-            <PortalComunicados
-              comunicados={comunicados}
-              cpf={userCpf}
-              unidade={admissao?.unidade}
-              departamento={admissao?.departamento}
-            />
-          </TabsContent>
-
-          <TabsContent value="tarefas">
-            <PortalTarefas cpf={userCpf} departamento={admissao?.departamento} unidade={admissao?.unidade} />
-          </TabsContent>
-
-          <TabsContent value="chat">
-            <ChatContainer meuCpf={userCpf} />
-          </TabsContent>
-        </Tabs>
-      </main>
-    </div>
+          <main className="flex-1 overflow-auto p-4 md:p-6">
+            {renderContent()}
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
   );
 };
 
