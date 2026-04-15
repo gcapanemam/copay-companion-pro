@@ -59,6 +59,31 @@ export function AdminTarefas() {
     },
   });
 
+  const { data: pendencias } = useQuery({
+    queryKey: ["admin-pendencias-abertas"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tarefa_atualizacoes")
+        .select("*, tarefas(titulo, valor_destinatario, tipo_destinatario)")
+        .eq("tipo", "pendencia")
+        .eq("resolvida", false)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const handleResolver = async (id: string) => {
+    try {
+      const { error } = await supabase.from("tarefa_atualizacoes").update({ resolvida: true }).eq("id", id);
+      if (error) throw error;
+      toast({ title: "Pendência resolvida!" });
+      queryClient.invalidateQueries({ queryKey: ["admin-pendencias-abertas"] });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  };
+
   const { data: admissoes } = useQuery({
     queryKey: ["admin-admissoes-tarefas"],
     queryFn: async () => {
