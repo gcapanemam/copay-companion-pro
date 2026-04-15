@@ -15,8 +15,9 @@ import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon, Plus, Loader2, Eye, Image as ImageIcon } from "lucide-react";
+import { CalendarIcon, Plus, Loader2, Eye, Image as ImageIcon, AlertTriangle, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const STATUS_LABELS: Record<string, string> = {
   pendente: "Pendente",
