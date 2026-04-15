@@ -15,8 +15,9 @@ import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon, Plus, Loader2, Eye, Image as ImageIcon } from "lucide-react";
+import { CalendarIcon, Plus, Loader2, Eye, Image as ImageIcon, AlertTriangle, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const STATUS_LABELS: Record<string, string> = {
   pendente: "Pendente",
@@ -57,6 +58,31 @@ export function AdminTarefas() {
       return data;
     },
   });
+
+  const { data: pendencias } = useQuery({
+    queryKey: ["admin-pendencias-abertas"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tarefa_atualizacoes")
+        .select("*, tarefas(titulo, valor_destinatario, tipo_destinatario)")
+        .eq("tipo", "pendencia")
+        .eq("resolvida", false)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const handleResolver = async (id: string) => {
+    try {
+      const { error } = await supabase.from("tarefa_atualizacoes").update({ resolvida: true }).eq("id", id);
+      if (error) throw error;
+      toast({ title: "Pendência resolvida!" });
+      queryClient.invalidateQueries({ queryKey: ["admin-pendencias-abertas"] });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  };
 
   const { data: admissoes } = useQuery({
     queryKey: ["admin-admissoes-tarefas"],
@@ -146,6 +172,42 @@ export function AdminTarefas() {
 
   return (
     <div className="space-y-4">
+      {/* Pendency alerts */}
+      {pendencias && pendencias.length > 0 && (
+        <div className="space-y-2">
+          {pendencias.map((p: any) => {
+            const tarefa = p.tarefas;
+            const funcName = (admissoes || []).find((a: any) => a.cpf === p.cpf)?.nome_completo || p.cpf;
+            return (
+              <Alert key={p.id} className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <AlertDescription className="flex items-center justify-between">
+                  <div>
+                    <span className="font-medium text-yellow-800 dark:text-yellow-200">Pendência criada</span>
+                    <span className="text-sm text-muted-foreground ml-2">
+                      {tarefa?.titulo} — {funcName}
+                    </span>
+                    {p.conteudo && <p className="text-sm mt-1">{p.conteudo}</p>}
+                    <p className="text-xs text-muted-foreground">{format(new Date(p.created_at), "dd/MM/yyyy HH:mm")}</p>
+                  </div>
+                  <div className="flex gap-2 ml-4 shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => {
+                      const t = (tarefas || []).find((t: any) => t.id === p.tarefa_id);
+                      if (t) setDetailTask(t);
+                    }}>
+                      <Eye className="h-3 w-3 mr-1" />Ver
+                    </Button>
+                    <Button size="sm" variant="default" onClick={() => handleResolver(p.id)}>
+                      <CheckCircle className="h-3 w-3 mr-1" />Resolver
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            );
+          })}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Select value={filtroStatus} onValueChange={setFiltroStatus}>
