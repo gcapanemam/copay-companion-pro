@@ -790,6 +790,7 @@ export type Database = {
           cpf: string
           created_at: string
           id: string
+          resolvida: boolean
           status_anterior: string | null
           status_novo: string | null
           tarefa_id: string
@@ -800,6 +801,7 @@ export type Database = {
           cpf: string
           created_at?: string
           id?: string
+          resolvida?: boolean
           status_anterior?: string | null
           status_novo?: string | null
           tarefa_id: string
@@ -810,6 +812,7 @@ export type Database = {
           cpf?: string
           created_at?: string
           id?: string
+          resolvida?: boolean
           status_anterior?: string | null
           status_novo?: string | null
           tarefa_id?: string
