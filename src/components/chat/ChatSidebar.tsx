@@ -1,10 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Plus, Search, Users, User } from "lucide-react";
+import { Plus, Search, Users, User, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { ChatNovaConversa } from "./ChatNovaConversa";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Conversa {
   id: string;
@@ -26,17 +32,21 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
   const [conversas, setConversas] = useState<Conversa[]>([]);
   const [busca, setBusca] = useState("");
   const [novaOpen, setNovaOpen] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { toast } = useToast();
+  const isAdmin = meuCpf === "admin";
 
   const loadConversas = useCallback(async () => {
-    // 1. Get my conversation IDs
     const { data: membros } = await supabase
       .from("chat_membros").select("conversa_id").eq("cpf", meuCpf);
     if (!membros || membros.length === 0) { setConversas([]); return; }
 
     const ids = membros.map(m => m.conversa_id);
 
-    // 2. Batch: get all conversations, all members, all last messages, all statuses
     const [convsRes, allMembrosRes, allMsgsRes] = await Promise.all([
       supabase.from("chat_conversas").select("*").in("id", ids),
       supabase.from("chat_membros").select("conversa_id, cpf").in("conversa_id", ids),
@@ -50,13 +60,11 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
 
     if (convs.length === 0) { setConversas([]); return; }
 
-    // 3. Get unique other CPFs for individual chats
     const outroCpfs = new Set<string>();
     for (const m of allMembros) {
       if (m.cpf !== meuCpf) outroCpfs.add(m.cpf);
     }
 
-    // 4. Batch: get names for all other members
     let namesMap: Record<string, string> = {};
     if (outroCpfs.size > 0) {
       const { data: adms } = await supabase
@@ -64,13 +72,10 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
       (adms || []).forEach(a => { namesMap[a.cpf] = a.nome_completo; });
     }
 
-    // 5. Get IDs of messages from others (for unread count)
     const otherMsgIds = allMsgs.filter(m => m.remetente_cpf !== meuCpf).map(m => m.id);
 
-    // 6. Batch: get read statuses for all those messages
     let statusMap = new Map<string, boolean>();
     if (otherMsgIds.length > 0) {
-      // Supabase .in() has a limit, chunk if needed
       const chunks = [];
       for (let i = 0; i < otherMsgIds.length; i += 500) {
         chunks.push(otherMsgIds.slice(i, i + 500));
@@ -88,7 +93,6 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
       }
     }
 
-    // 7. Build result
     const result: Conversa[] = convs.map(c => {
       let outroNome = c.nome || "";
       if (c.tipo === "individual") {
@@ -96,10 +100,7 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
         outroNome = outro ? (namesMap[outro.cpf] || outro.cpf) : "";
       }
 
-      // Last message for this conversation
       const lastMsg = allMsgs.find(m => m.conversa_id === c.id);
-
-      // Unread count for this conversation
       const convOtherMsgs = allMsgs.filter(m => m.conversa_id === c.id && m.remetente_cpf !== meuCpf);
       const naoLidas = convOtherMsgs.filter(m => !statusMap.has(m.id)).length;
 
@@ -125,7 +126,6 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
 
   useEffect(() => { loadConversas(); }, [meuCpf]);
 
-  // Realtime reload with debounce
   useEffect(() => {
     const channel = supabase
       .channel("chat-sidebar-" + meuCpf)
@@ -137,6 +137,47 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [meuCpf, debouncedLoad]);
+
+  const handleDeleteSelected = async () => {
+    if (selected.size === 0) return;
+    setDeleting(true);
+    try {
+      const ids = Array.from(selected);
+      // Get all message IDs for these conversations
+      const { data: msgs } = await supabase
+        .from("chat_mensagens").select("id").in("conversa_id", ids);
+      const msgIds = (msgs || []).map(m => m.id);
+
+      // Delete in order: statuses -> messages -> members -> conversations
+      if (msgIds.length > 0) {
+        for (let i = 0; i < msgIds.length; i += 500) {
+          const chunk = msgIds.slice(i, i + 500);
+          await supabase.from("chat_mensagem_status").delete().in("mensagem_id", chunk);
+        }
+      }
+      await supabase.from("chat_mensagens").delete().in("conversa_id", ids);
+      await supabase.from("chat_membros").delete().in("conversa_id", ids);
+      await supabase.from("chat_conversas").delete().in("id", ids);
+
+      toast({ title: "Conversas excluídas", description: `${ids.length} conversa(s) removida(s).` });
+      setSelected(new Set());
+      setSelectMode(false);
+      loadConversas();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setDeleting(false);
+      setConfirmOpen(false);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const filtradas = conversas.filter(c => {
     const nome = (c.tipo === "grupo" ? c.nome : c.outroNome) || "";
@@ -158,10 +199,31 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
       <div className="p-3 border-b space-y-2">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-sm">Conversas</h3>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setNovaOpen(true)}>
-            <Plus className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            {isAdmin && (
+              selectMode ? (
+                <>
+                  <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => { if (selected.size > 0) setConfirmOpen(true); }} disabled={selected.size === 0}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { setSelectMode(false); setSelected(new Set()); }}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </>
+              ) : (
+                <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => setSelectMode(true)} title="Excluir conversas">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )
+            )}
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setNovaOpen(true)}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
+        {selectMode && (
+          <p className="text-xs text-muted-foreground">Selecione as conversas para excluir ({selected.size} selecionada{selected.size !== 1 ? "s" : ""})</p>
+        )}
         <div className="relative">
           <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input placeholder="Buscar..." className="pl-8 h-8 text-sm" value={busca} onChange={e => setBusca(e.target.value)} />
@@ -176,8 +238,11 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
             <div
               key={c.id}
               className={`flex items-center gap-3 px-3 py-3 cursor-pointer hover:bg-accent border-b ${isActive ? "bg-accent" : ""}`}
-              onClick={() => onSelectConversa(c.id)}
+              onClick={() => selectMode ? toggleSelect(c.id) : onSelectConversa(c.id)}
             >
+              {selectMode && (
+                <Checkbox checked={selected.has(c.id)} onCheckedChange={() => toggleSelect(c.id)} className="flex-shrink-0" />
+              )}
               <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
                 {c.tipo === "grupo" ? <Users className="h-5 w-5 text-primary" /> : <User className="h-5 w-5 text-primary" />}
               </div>
@@ -204,6 +269,23 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
       </ScrollArea>
 
       <ChatNovaConversa open={novaOpen} onOpenChange={setNovaOpen} meuCpf={meuCpf} onConversaCriada={(id) => onSelectConversa(id)} />
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir conversas?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selected.size} conversa(s) será(ão) excluída(s) permanentemente, incluindo todas as mensagens. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteSelected} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleting ? "Excluindo..." : "Sim, excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
