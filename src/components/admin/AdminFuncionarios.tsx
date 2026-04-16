@@ -322,6 +322,20 @@ export function AdminFuncionarios() {
                 Excluir ({selectedCpfs.size})
               </Button>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleBulkImport}
+              disabled={importStatus?.running}
+              className="gap-1"
+            >
+              {importStatus?.running ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CloudDownload className="h-4 w-4" />
+              )}
+              Importar Docs do Drive
+            </Button>
             <div className="relative w-56">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Buscar nome ou CPF..." value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-9" />
