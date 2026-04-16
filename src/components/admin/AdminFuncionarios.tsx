@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +10,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, Search, Users, UserX, Eye, Trash2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Loader2, Search, Users, UserX, Eye, Trash2, CloudDownload } from "lucide-react";
 import { FichaFuncionalDialog } from "./FichaFuncionalDialog";
 import { toast } from "sonner";
 import {
@@ -42,6 +43,8 @@ export function AdminFuncionarios() {
   const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [importStatus, setImportStatus] = useState<{ running: boolean; progress: number; total: number; success: number; errors: number; already: number } | null>(null);
+  const importAbortRef = useRef(false);
   const queryClient = useQueryClient();
 
   const { data: admissoes, isLoading: loadingAdmissoes } = useQuery({
@@ -163,6 +166,51 @@ export function AdminFuncionarios() {
     }
   };
 
+  const handleBulkImport = useCallback(async () => {
+    importAbortRef.current = false;
+    const totalFuncs = funcionarios.length;
+    setImportStatus({ running: true, progress: 0, total: totalFuncs, success: 0, errors: 0, already: 0 });
+    
+    let totalSuccess = 0;
+    let totalErrors = 0;
+    let totalAlready = 0;
+    const batchSize = 2;
+    
+    for (let offset = 0; offset < totalFuncs; offset += batchSize) {
+      if (importAbortRef.current) break;
+      
+      try {
+        const { data, error } = await supabase.functions.invoke("import-drive-files", {
+          body: { limit: batchSize, offset },
+        });
+        
+        if (error) {
+          totalErrors += batchSize;
+        } else {
+          const result = data as any;
+          totalSuccess += result.success || 0;
+          totalErrors += result.errors || 0;
+          totalAlready += result.already_imported || 0;
+        }
+      } catch {
+        totalErrors += batchSize;
+      }
+      
+      setImportStatus({
+        running: true,
+        progress: Math.min(offset + batchSize, totalFuncs),
+        total: totalFuncs,
+        success: totalSuccess,
+        errors: totalErrors,
+        already: totalAlready,
+      });
+    }
+    
+    setImportStatus(prev => prev ? { ...prev, running: false } : null);
+    toast.success(`Importação concluída: ${totalSuccess} importados, ${totalAlready} já existiam, ${totalErrors} erros.`);
+    queryClient.invalidateQueries({ queryKey: ["admin-admissoes-func"] });
+  }, [funcionarios.length, queryClient]);
+
   const renderTable = (list: any[], showDemissao = false) => {
     if (!list.length) {
       return <p className="text-muted-foreground text-center py-4">Nenhum funcionário encontrado.</p>;
@@ -274,6 +322,20 @@ export function AdminFuncionarios() {
                 Excluir ({selectedCpfs.size})
               </Button>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleBulkImport}
+              disabled={importStatus?.running}
+              className="gap-1"
+            >
+              {importStatus?.running ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CloudDownload className="h-4 w-4" />
+              )}
+              Importar Docs do Drive
+            </Button>
             <div className="relative w-56">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Buscar nome ou CPF..." value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-9" />
@@ -295,6 +357,29 @@ export function AdminFuncionarios() {
           </div>
         </CardHeader>
         <CardContent>
+          {importStatus && (
+            <div className="mb-4 space-y-2 p-3 border rounded-lg bg-muted/30">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">
+                  {importStatus.running ? "Importando documentos do Drive..." : "Importação concluída"}
+                </span>
+                <span className="text-muted-foreground">
+                  {importStatus.progress}/{importStatus.total} funcionários
+                </span>
+              </div>
+              <Progress value={(importStatus.progress / importStatus.total) * 100} className="h-2" />
+              <div className="flex gap-4 text-xs text-muted-foreground">
+                <span className="text-green-600">✓ {importStatus.success} importados</span>
+                <span>⏭ {importStatus.already} já existiam</span>
+                {importStatus.errors > 0 && <span className="text-destructive">✗ {importStatus.errors} erros</span>}
+              </div>
+              {importStatus.running && (
+                <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { importAbortRef.current = true; }}>
+                  Cancelar
+                </Button>
+              )}
+            </div>
+          )}
           {isLoading ? (
             <Loader2 className="h-6 w-6 animate-spin mx-auto" />
           ) : (
