@@ -103,6 +103,7 @@ export function FichaFuncionalDialog({ funcionario, open, onClose }: FichaFuncio
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [importingDrive, setImportingDrive] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -114,6 +115,22 @@ export function FichaFuncionalDialog({ funcionario, open, onClose }: FichaFuncio
       if (error) throw error;
       return data;
     },
+  });
+
+  // Fetch documents for this employee
+  const { data: documentos, refetch: refetchDocs } = useQuery({
+    queryKey: ["funcionario-documentos", funcionario?.cpf],
+    queryFn: async () => {
+      if (!funcionario?.cpf) return [];
+      const { data, error } = await supabase
+        .from("funcionario_documentos")
+        .select("*")
+        .eq("cpf", funcionario.cpf)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!funcionario?.cpf,
   });
 
   // Initialize form data when opening or switching employee
