@@ -474,6 +474,78 @@ export function FichaFuncionalDialog({ funcionario, open, onClose }: FichaFuncio
               </div>
             </div>
           )}
+
+          {/* Documentos section */}
+          <div className="border rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Download className="h-4 w-4 text-primary" />
+                <h3 className="font-semibold text-sm text-muted-foreground">Documentos</h3>
+                {(documentos?.length || 0) > 0 && (
+                  <Badge variant="secondary" className="text-xs">{documentos!.length}</Badge>
+                )}
+              </div>
+              {driveLinksCount > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleImportDrive}
+                  disabled={importingDrive}
+                >
+                  {importingDrive ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <CloudDownload className="h-4 w-4 mr-1" />
+                  )}
+                  Importar do Drive ({driveLinksCount})
+                </Button>
+              )}
+            </div>
+
+            {(documentos?.length || 0) > 0 ? (
+              <div className="space-y-2">
+                {documentos!.map((doc: any) => {
+                  const publicUrl = getDocPublicUrl(doc.arquivo_url);
+                  const label = doc.tipo_documento
+                    .replace(/_/g, " ")
+                    .replace(/\b\w/g, (l: string) => l.toUpperCase());
+                  return (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between bg-muted/40 rounded px-3 py-2 text-sm"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="truncate">{label}</span>
+                        <span className="text-xs text-muted-foreground">({doc.nome_arquivo})</span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button size="icon" variant="ghost" className="h-7 w-7" asChild>
+                          <a href={publicUrl} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-destructive"
+                          onClick={() => handleDeleteDoc(doc.id, doc.arquivo_url)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {driveLinksCount > 0
+                  ? "Nenhum documento importado ainda. Clique em \"Importar do Drive\" para começar."
+                  : "Nenhum documento encontrado."}
+              </p>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
