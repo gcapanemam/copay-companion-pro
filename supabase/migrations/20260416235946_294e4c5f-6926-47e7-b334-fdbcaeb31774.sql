@@ -1,0 +1,7 @@
+ALTER TABLE public.equipamentos_ponto
+  ADD COLUMN IF NOT EXISTS host TEXT,
+  ADD COLUMN IF NOT EXISTS porta INTEGER,
+  ADD COLUMN IF NOT EXISTS usuario TEXT,
+  ADD COLUMN IF NOT EXISTS senha_cripto TEXT,
+  ADD COLUMN IF NOT EXISTS tipo_conexao TEXT NOT NULL DEFAULT 'idcloud_mysql',
+  ADD COLUMN IF NOT EXISTS versao_firmware TEXT;
