@@ -166,6 +166,51 @@ export function AdminFuncionarios() {
     }
   };
 
+  const handleBulkImport = useCallback(async () => {
+    importAbortRef.current = false;
+    const totalFuncs = funcionarios.length;
+    setImportStatus({ running: true, progress: 0, total: totalFuncs, success: 0, errors: 0, already: 0 });
+    
+    let totalSuccess = 0;
+    let totalErrors = 0;
+    let totalAlready = 0;
+    const batchSize = 2;
+    
+    for (let offset = 0; offset < totalFuncs; offset += batchSize) {
+      if (importAbortRef.current) break;
+      
+      try {
+        const { data, error } = await supabase.functions.invoke("import-drive-files", {
+          body: { limit: batchSize, offset },
+        });
+        
+        if (error) {
+          totalErrors += batchSize;
+        } else {
+          const result = data as any;
+          totalSuccess += result.success || 0;
+          totalErrors += result.errors || 0;
+          totalAlready += result.already_imported || 0;
+        }
+      } catch {
+        totalErrors += batchSize;
+      }
+      
+      setImportStatus({
+        running: true,
+        progress: Math.min(offset + batchSize, totalFuncs),
+        total: totalFuncs,
+        success: totalSuccess,
+        errors: totalErrors,
+        already: totalAlready,
+      });
+    }
+    
+    setImportStatus(prev => prev ? { ...prev, running: false } : null);
+    toast.success(`Importação concluída: ${totalSuccess} importados, ${totalAlready} já existiam, ${totalErrors} erros.`);
+    queryClient.invalidateQueries({ queryKey: ["admin-admissoes-func"] });
+  }, [funcionarios.length, queryClient]);
+
   const renderTable = (list: any[], showDemissao = false) => {
     if (!list.length) {
       return <p className="text-muted-foreground text-center py-4">Nenhum funcionário encontrado.</p>;
