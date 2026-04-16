@@ -694,6 +694,36 @@ export type Database = {
         }
         Relationships: []
       }
+      funcionario_documentos: {
+        Row: {
+          arquivo_url: string
+          cpf: string
+          created_at: string
+          drive_url_original: string | null
+          id: string
+          nome_arquivo: string
+          tipo_documento: string
+        }
+        Insert: {
+          arquivo_url: string
+          cpf: string
+          created_at?: string
+          drive_url_original?: string | null
+          id?: string
+          nome_arquivo: string
+          tipo_documento: string
+        }
+        Update: {
+          arquivo_url?: string
+          cpf?: string
+          created_at?: string
+          drive_url_original?: string | null
+          id?: string
+          nome_arquivo?: string
+          tipo_documento?: string
+        }
+        Relationships: []
+      }
       mensalidades: {
         Row: {
           ano: number
