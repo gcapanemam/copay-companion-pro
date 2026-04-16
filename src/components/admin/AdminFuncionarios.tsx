@@ -365,6 +365,20 @@ export function AdminFuncionarios() {
             <Button
               size="sm"
               variant="outline"
+              onClick={handleApplyFotos}
+              disabled={fotoStatus?.running}
+              className="gap-1"
+            >
+              {fotoStatus?.running ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ImageIcon className="h-4 w-4" />
+              )}
+              Aplicar Fotos 3x4
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={handleBulkImport}
               disabled={importStatus?.running}
               className="gap-1"
