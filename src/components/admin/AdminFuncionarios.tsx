@@ -357,6 +357,29 @@ export function AdminFuncionarios() {
           </div>
         </CardHeader>
         <CardContent>
+          {importStatus && (
+            <div className="mb-4 space-y-2 p-3 border rounded-lg bg-muted/30">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">
+                  {importStatus.running ? "Importando documentos do Drive..." : "Importação concluída"}
+                </span>
+                <span className="text-muted-foreground">
+                  {importStatus.progress}/{importStatus.total} funcionários
+                </span>
+              </div>
+              <Progress value={(importStatus.progress / importStatus.total) * 100} className="h-2" />
+              <div className="flex gap-4 text-xs text-muted-foreground">
+                <span className="text-green-600">✓ {importStatus.success} importados</span>
+                <span>⏭ {importStatus.already} já existiam</span>
+                {importStatus.errors > 0 && <span className="text-destructive">✗ {importStatus.errors} erros</span>}
+              </div>
+              {importStatus.running && (
+                <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { importAbortRef.current = true; }}>
+                  Cancelar
+                </Button>
+              )}
+            </div>
+          )}
           {isLoading ? (
             <Loader2 className="h-6 w-6 animate-spin mx-auto" />
           ) : (
