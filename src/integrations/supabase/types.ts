@@ -664,6 +664,45 @@ export type Database = {
         }
         Relationships: []
       }
+      equipamentos_ponto: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          descricao: string | null
+          id: string
+          modelo: string | null
+          nome: string
+          numero_serie: string | null
+          ultima_sincronizacao: string | null
+          ultimo_nsr: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          modelo?: string | null
+          nome: string
+          numero_serie?: string | null
+          ultima_sincronizacao?: string | null
+          ultimo_nsr?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          modelo?: string | null
+          nome?: string
+          numero_serie?: string | null
+          ultima_sincronizacao?: string | null
+          ultimo_nsr?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       faltas: {
         Row: {
           abonada: boolean
@@ -774,48 +813,68 @@ export type Database = {
           cpf: string
           created_at: string
           data: string
+          data_hora: string | null
           duracao: string | null
           entrada_1: string | null
           entrada_2: string | null
           entrada_3: string | null
+          equipamento_id: string | null
           id: string
           motivo: string | null
+          nsr: number | null
           ocorrencia: string | null
           saida_1: string | null
           saida_2: string | null
           saida_3: string | null
+          tipo_marcacao: string | null
         }
         Insert: {
           cpf: string
           created_at?: string
           data: string
+          data_hora?: string | null
           duracao?: string | null
           entrada_1?: string | null
           entrada_2?: string | null
           entrada_3?: string | null
+          equipamento_id?: string | null
           id?: string
           motivo?: string | null
+          nsr?: number | null
           ocorrencia?: string | null
           saida_1?: string | null
           saida_2?: string | null
           saida_3?: string | null
+          tipo_marcacao?: string | null
         }
         Update: {
           cpf?: string
           created_at?: string
           data?: string
+          data_hora?: string | null
           duracao?: string | null
           entrada_1?: string | null
           entrada_2?: string | null
           entrada_3?: string | null
+          equipamento_id?: string | null
           id?: string
           motivo?: string | null
+          nsr?: number | null
           ocorrencia?: string | null
           saida_1?: string | null
           saida_2?: string | null
           saida_3?: string | null
+          tipo_marcacao?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "registros_ponto_equipamento_id_fkey"
+            columns: ["equipamento_id"]
+            isOneToOne: false
+            referencedRelation: "equipamentos_ponto"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tarefa_atualizacoes: {
         Row: {
