@@ -1,0 +1,1 @@
+ALTER TABLE public.admissoes ADD COLUMN data_demissao date NULL;

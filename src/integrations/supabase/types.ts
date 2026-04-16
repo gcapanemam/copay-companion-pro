@@ -68,6 +68,7 @@ export type Database = {
           dados: Json | null
           dados_bancarios: string | null
           data_cadastro_pis: string | null
+          data_demissao: string | null
           data_expedicao_rg: string | null
           data_nascimento: string | null
           departamento: string | null
@@ -113,6 +114,7 @@ export type Database = {
           dados?: Json | null
           dados_bancarios?: string | null
           data_cadastro_pis?: string | null
+          data_demissao?: string | null
           data_expedicao_rg?: string | null
           data_nascimento?: string | null
           departamento?: string | null
@@ -158,6 +160,7 @@ export type Database = {
           dados?: Json | null
           dados_bancarios?: string | null
           data_cadastro_pis?: string | null
+          data_demissao?: string | null
           data_expedicao_rg?: string | null
           data_nascimento?: string | null
           departamento?: string | null
