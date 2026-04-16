@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Search, Users, Eye, Trash2 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Loader2, Search, Users, UserX, Eye, Trash2 } from "lucide-react";
 import { FichaFuncionalDialog } from "./FichaFuncionalDialog";
 import { toast } from "sonner";
 import {
@@ -96,15 +97,25 @@ export function AdminFuncionarios() {
   const unidades = [...new Set(funcionarios.map(f => f.dados?.unidade || f.admissao?.unidade || "").filter(Boolean))].sort();
   const departamentos = [...new Set(funcionarios.map(f => f.dados?.departamento || f.admissao?.departamento || "").filter(Boolean))].sort();
 
-  const filtered = funcionarios.filter((f) => {
-    const term = busca.toLowerCase();
-    const matchNome = f.nome.toLowerCase().includes(term) || f.cpf.includes(busca.replace(/\D/g, ""));
-    const uni = f.dados?.unidade || f.admissao?.unidade || "";
-    const dep = f.dados?.departamento || f.admissao?.departamento || "";
-    const matchUnidade = filtroUnidade === "__all__" || uni === filtroUnidade;
-    const matchDep = filtroDepartamento === "__all__" || dep === filtroDepartamento;
-    return matchNome && matchUnidade && matchDep;
-  });
+  const applyFilters = (list: any[]) => {
+    return list.filter((f) => {
+      const term = busca.toLowerCase();
+      const matchNome = f.nome.toLowerCase().includes(term) || f.cpf.includes(busca.replace(/\D/g, ""));
+      const uni = f.dados?.unidade || f.admissao?.unidade || "";
+      const dep = f.dados?.departamento || f.admissao?.departamento || "";
+      const matchUnidade = filtroUnidade === "__all__" || uni === filtroUnidade;
+      const matchDep = filtroDepartamento === "__all__" || dep === filtroDepartamento;
+      return matchNome && matchUnidade && matchDep;
+    });
+  };
+
+  const isInativo = (f: any) => {
+    const demissao = f.admissao?.data_demissao || f.dados?.data_demissao;
+    return !!demissao;
+  };
+
+  const ativos = applyFilters(funcionarios.filter(f => !isInativo(f)));
+  const inativos = applyFilters(funcionarios.filter(f => isInativo(f)));
 
   const getFotoUrl = (f: any) => {
     const fotoUrl = f.admissao?.foto_url;
@@ -122,31 +133,18 @@ export function AdminFuncionarios() {
     });
   };
 
-  const toggleAll = () => {
-    if (selectedCpfs.size === filtered.length) {
-      setSelectedCpfs(new Set());
-    } else {
-      setSelectedCpfs(new Set(filtered.map(f => f.cpf)));
-    }
-  };
-
   const handleDelete = async () => {
     setDeleting(true);
     try {
       const cpfsToDelete = Array.from(selectedCpfs);
-
-      // Find which funcionarios to delete and from which tables
       const funcsToDelete = funcionarios.filter(f => cpfsToDelete.includes(f.cpf));
 
       for (const func of funcsToDelete) {
-        // Delete from admissoes if exists
         if (func.admissao) {
           const { error } = await supabase.from("admissoes").delete().eq("id", func.admissao.id);
           if (error) throw error;
         }
-        // Delete from titulares if exists
         if (func.titularId) {
-          // Delete dependentes first
           await supabase.from("dependentes").delete().eq("titular_id", func.titularId);
           const { error } = await supabase.from("titulares").delete().eq("id", func.titularId);
           if (error) throw error;
@@ -165,13 +163,104 @@ export function AdminFuncionarios() {
     }
   };
 
+  const renderTable = (list: any[], showDemissao = false) => {
+    if (!list.length) {
+      return <p className="text-muted-foreground text-center py-4">Nenhum funcionário encontrado.</p>;
+    }
+
+    return (
+      <div className="max-h-[500px] overflow-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={list.length > 0 && list.every(f => selectedCpfs.has(f.cpf))}
+                  onCheckedChange={() => {
+                    const allSelected = list.every(f => selectedCpfs.has(f.cpf));
+                    setSelectedCpfs(prev => {
+                      const next = new Set(prev);
+                      list.forEach(f => allSelected ? next.delete(f.cpf) : next.add(f.cpf));
+                      return next;
+                    });
+                  }}
+                />
+              </TableHead>
+              <TableHead className="w-12"></TableHead>
+              <TableHead>Nome</TableHead>
+              <TableHead>CPF</TableHead>
+              <TableHead>Função</TableHead>
+              <TableHead>Unidade</TableHead>
+              <TableHead>Departamento</TableHead>
+              {showDemissao && <TableHead>Demissão</TableHead>}
+              <TableHead>Origem</TableHead>
+              <TableHead className="w-12"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {list.map((f) => {
+              const foto = getFotoUrl(f);
+              return (
+                <TableRow key={f.cpf} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelected(f)}>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedCpfs.has(f.cpf)}
+                      onCheckedChange={() => toggleCpf(f.cpf)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Avatar className="h-8 w-8">
+                      {foto && <AvatarImage src={foto} />}
+                      <AvatarFallback className="text-xs">{getInitials(f.nome)}</AvatarFallback>
+                    </Avatar>
+                  </TableCell>
+                  <TableCell className="font-medium">{f.nome}</TableCell>
+                  <TableCell>{formatCpf(f.cpf)}</TableCell>
+                  <TableCell>{f.dados?.funcao || f.admissao?.funcao || "-"}</TableCell>
+                  <TableCell>{f.dados?.unidade || f.admissao?.unidade || "-"}</TableCell>
+                  <TableCell>{f.dados?.departamento || f.admissao?.departamento || "-"}</TableCell>
+                  {showDemissao && (
+                    <TableCell>
+                      <Badge variant="destructive" className="text-xs">
+                        {f.admissao?.data_demissao || f.dados?.data_demissao || "-"}
+                      </Badge>
+                    </TableCell>
+                  )}
+                  <TableCell>
+                    <Badge variant={f.origem === "Ambos" ? "default" : "secondary"}>{f.origem}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      title="Ver como funcionário"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(`/minha-area?admin_cpf=${f.cpf}`, "_blank");
+                      }}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
+
+  const isLoading = loadingAdmissoes || loadingTitulares;
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
-            <CardTitle>Funcionários ({filtered.length})</CardTitle>
+            <CardTitle>Funcionários ({funcionarios.length})</CardTitle>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             {selectedCpfs.size > 0 && (
@@ -206,76 +295,27 @@ export function AdminFuncionarios() {
           </div>
         </CardHeader>
         <CardContent>
-          {(loadingAdmissoes || loadingTitulares) ? (
+          {isLoading ? (
             <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-          ) : !filtered.length ? (
-            <p className="text-muted-foreground text-center py-4">Nenhum funcionário encontrado.</p>
           ) : (
-            <div className="max-h-[500px] overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">
-                      <Checkbox
-                        checked={filtered.length > 0 && selectedCpfs.size === filtered.length}
-                        onCheckedChange={toggleAll}
-                      />
-                    </TableHead>
-                    <TableHead className="w-12"></TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>CPF</TableHead>
-                    <TableHead>Função</TableHead>
-                    <TableHead>Unidade</TableHead>
-                    <TableHead>Departamento</TableHead>
-                    <TableHead>Origem</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((f) => {
-                    const foto = getFotoUrl(f);
-                    return (
-                      <TableRow key={f.cpf} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelected(f)}>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <Checkbox
-                            checked={selectedCpfs.has(f.cpf)}
-                            onCheckedChange={() => toggleCpf(f.cpf)}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Avatar className="h-8 w-8">
-                            {foto && <AvatarImage src={foto} />}
-                            <AvatarFallback className="text-xs">{getInitials(f.nome)}</AvatarFallback>
-                          </Avatar>
-                        </TableCell>
-                        <TableCell className="font-medium">{f.nome}</TableCell>
-                        <TableCell>{formatCpf(f.cpf)}</TableCell>
-                        <TableCell>{f.dados?.funcao || f.admissao?.funcao || "-"}</TableCell>
-                        <TableCell>{f.dados?.unidade || f.admissao?.unidade || "-"}</TableCell>
-                        <TableCell>{f.dados?.departamento || f.admissao?.departamento || "-"}</TableCell>
-                        <TableCell>
-                          <Badge variant={f.origem === "Ambos" ? "default" : "secondary"}>{f.origem}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title="Ver como funcionário"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.open(`/minha-area?admin_cpf=${f.cpf}`, "_blank");
-                            }}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+            <Tabs defaultValue="ativos">
+              <TabsList className="mb-4">
+                <TabsTrigger value="ativos" className="gap-2">
+                  <Users className="h-4 w-4" />
+                  Ativos ({ativos.length})
+                </TabsTrigger>
+                <TabsTrigger value="inativos" className="gap-2">
+                  <UserX className="h-4 w-4" />
+                  Inativos ({inativos.length})
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="ativos">
+                {renderTable(ativos)}
+              </TabsContent>
+              <TabsContent value="inativos">
+                {renderTable(inativos, true)}
+              </TabsContent>
+            </Tabs>
           )}
         </CardContent>
       </Card>
