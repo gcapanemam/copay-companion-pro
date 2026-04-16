@@ -213,6 +213,44 @@ export function AdminFuncionarios() {
     queryClient.invalidateQueries({ queryKey: ["admin-admissoes-func"] });
   }, [funcionarios.length, queryClient]);
 
+  const handleApplyFotos = useCallback(async () => {
+    fotoAbortRef.current = false;
+    setFotoStatus({ running: true, processed: 0, success: 0, errors: 0, skipped: 0 });
+    let totalSuccess = 0, totalErrors = 0, totalSkipped = 0, totalProcessed = 0;
+    const batchSize = 50;
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore && !fotoAbortRef.current) {
+      try {
+        const { data, error } = await supabase.functions.invoke("apply-foto-perfil", {
+          body: { limit: batchSize, offset },
+        });
+        if (error) {
+          totalErrors += batchSize;
+          hasMore = false;
+        } else {
+          const r = data as any;
+          totalProcessed += r.processed || 0;
+          totalSuccess += r.success || 0;
+          totalErrors += r.errors || 0;
+          totalSkipped += r.skipped || 0;
+          hasMore = !!r.hasMore;
+          offset += batchSize;
+        }
+      } catch {
+        totalErrors += batchSize;
+        hasMore = false;
+      }
+      setFotoStatus({ running: hasMore, processed: totalProcessed, success: totalSuccess, errors: totalErrors, skipped: totalSkipped });
+    }
+
+    setFotoStatus(prev => prev ? { ...prev, running: false } : null);
+    toast.success(`Fotos aplicadas: ${totalSuccess} sucesso, ${totalSkipped} ignoradas, ${totalErrors} erros.`);
+    queryClient.invalidateQueries({ queryKey: ["admin-admissoes-func"] });
+  }, [queryClient]);
+
+
   const renderTable = (list: any[], showDemissao = false) => {
     if (!list.length) {
       return <p className="text-muted-foreground text-center py-4">Nenhum funcionário encontrado.</p>;
