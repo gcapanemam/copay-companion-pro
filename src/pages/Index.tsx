@@ -5,7 +5,7 @@ import { SeletorAno } from "@/components/SeletorAno";
 import {
   Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus,
   CalendarX, ClipboardList, Users, Megaphone, MessageCircle,
-  ListTodo, Settings, LayoutDashboard,
+  ListTodo, Settings, LayoutDashboard, Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +26,7 @@ import { ChatContainer } from "@/components/chat/ChatContainer";
 import { AdminTarefas } from "@/components/admin/AdminTarefas";
 import { AdminConfiguracoes } from "@/components/admin/AdminConfiguracoes";
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
+import { AdminPontoEletronico } from "@/components/admin/AdminPontoEletronico";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 import {
   SidebarProvider, SidebarTrigger,
@@ -44,7 +45,7 @@ const BadgeCount = ({ count }: { count: number }) => {
 };
 
 type Section =
-  | "dashboard" | "funcionarios" | "contracheques" | "vt" | "faltas"
+  | "dashboard" | "funcionarios" | "contracheques" | "vt" | "faltas" | "ponto_eletronico"
   | "plano" | "epis" | "comunicados" | "chat" | "tarefas" | "admissao" | "configuracoes";
 
 const navGroups = [
@@ -67,6 +68,7 @@ const navGroups = [
       { id: "contracheques" as Section, label: "Contracheques", icon: FileText },
       { id: "vt" as Section, label: "Vale Transporte", icon: Bus },
       { id: "faltas" as Section, label: "Ponto", icon: CalendarX },
+      { id: "ponto_eletronico" as Section, label: "Ponto Eletrônico", icon: Clock },
     ],
   },
   {
@@ -167,6 +169,7 @@ const Index = () => {
       case "contracheques": return <AdminContracheques />;
       case "vt": return <AdminValeTransporte />;
       case "faltas": return <AdminFaltas />;
+      case "ponto_eletronico": return <AdminPontoEletronico />;
       case "plano":
         return (
           <div className="space-y-6">
