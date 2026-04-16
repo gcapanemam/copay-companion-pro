@@ -73,6 +73,7 @@ const FIXED_FIELDS = [
     { key: "funcao", label: "Função", tipo: "text" },
     { key: "primeiro_dia_trabalho", label: "1º Dia de Trabalho", tipo: "text" },
     { key: "horario_trabalho", label: "Horário de Trabalho", tipo: "text" },
+    { key: "data_demissao", label: "Data de Demissão", tipo: "date" },
     { key: "primeiro_emprego", label: "Primeiro Emprego", tipo: "boolean" },
     { key: "vale_transporte", label: "Vale Transporte", tipo: "boolean" },
     { key: "detalhes_vale_transporte", label: "Detalhes VT", tipo: "text" },
