@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Camera, Loader2, Pencil, Save, X, User, FileText, MapPin, Heart, Briefcase, Phone, Stethoscope } from "lucide-react";
+import { Camera, Loader2, Pencil, Save, X, User, FileText, MapPin, Heart, Briefcase, Phone, Stethoscope, Download, CloudDownload, Trash2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
 function getInitials(name: string) {
