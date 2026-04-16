@@ -44,7 +44,9 @@ export function AdminFuncionarios() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [importStatus, setImportStatus] = useState<{ running: boolean; progress: number; total: number; success: number; errors: number; already: number } | null>(null);
+  const [fotoStatus, setFotoStatus] = useState<{ running: boolean; processed: number; success: number; errors: number; skipped: number } | null>(null);
   const importAbortRef = useRef(false);
+  const fotoAbortRef = useRef(false);
   const queryClient = useQueryClient();
 
   const { data: admissoes, isLoading: loadingAdmissoes } = useQuery({
