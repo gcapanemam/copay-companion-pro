@@ -1077,7 +1077,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      _equipamento_enc_key: { Args: never; Returns: string }
+      obter_senha_equipamento: { Args: { p_id: string }; Returns: string }
+      salvar_equipamento_ponto: {
+        Args: {
+          p_ativo: boolean
+          p_descricao: string
+          p_host: string
+          p_id: string
+          p_modelo: string
+          p_nome: string
+          p_numero_serie: string
+          p_porta: number
+          p_senha: string
+          p_tipo_conexao: string
+          p_usuario: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

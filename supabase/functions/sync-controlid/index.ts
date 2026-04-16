@@ -1,4 +1,5 @@
-// Edge function: sincroniza marcações de ponto do iDCloud (Control iD) para registros_ponto
+// Edge function: sincroniza marcações de ponto do Control iD
+// Suporta dois modos por equipamento: iDCloud (MySQL) e REP Local (REST API)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { Client as MySQLClient } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
@@ -34,7 +35,6 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Carrega equipamento(s)
     const equipQuery = supabase.from("equipamentos_ponto").select("*").eq("ativo", true);
     if (equipamentoId) equipQuery.eq("id", equipamentoId);
     const { data: equipamentos, error: equipErr } = await equipQuery;
@@ -45,24 +45,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Conecta no MySQL do iDCloud
-    const host = Deno.env.get("IDCLOUD_MYSQL_HOST");
-    const port = Number(Deno.env.get("IDCLOUD_MYSQL_PORT") || "3306");
-    const username = Deno.env.get("IDCLOUD_MYSQL_USER");
-    const password = Deno.env.get("IDCLOUD_MYSQL_PASSWORD");
-    const db = Deno.env.get("IDCLOUD_MYSQL_DATABASE");
-
-    if (!host || !username || !password || !db) {
-      return new Response(JSON.stringify({ error: "Credenciais iDCloud não configuradas" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const mysql = await new MySQLClient().connect({
-      hostname: host, port, username, password, db,
-    });
-
-    // Carrega CPFs cadastrados para resolver matricula/pis -> cpf
     const { data: admissoes } = await supabase.from("admissoes").select("cpf, numero_pis");
     const cpfsValidos = new Set<string>();
     const pisToCpf = new Map<string, string>();
@@ -85,18 +67,70 @@ Deno.serve(async (req) => {
       const ultimoNsr = Number(equip.ultimo_nsr || 0);
 
       try {
-        // Tabela `afd` no iDCloud — schema típico: nsr, data_hora, pis (ou cpf), tipo
-        // Filtra pelo número de série e nsr > último importado
-        const rows = await mysql.query(
-          `SELECT nsr, data_hora, pis, cpf, matricula, tipo
-           FROM afd
-           WHERE nsr > ?
-           ${equip.numero_serie ? "AND (numero_serie = ? OR equipamento = ?)" : ""}
-           ORDER BY nsr ASC LIMIT ?`,
-          equip.numero_serie
-            ? [ultimoNsr, equip.numero_serie, equip.numero_serie, limit]
-            : [ultimoNsr, limit],
-        ) as AfdRow[];
+        if (!equip.host) {
+          relatorio.erros.push(`${equip.nome}: host não configurado`);
+          continue;
+        }
+
+        // Descriptografar senha via RPC SECURITY DEFINER
+        const { data: senhaPlana, error: senhaErr } = await supabase
+          .rpc("obter_senha_equipamento", { p_id: equip.id });
+        if (senhaErr) throw senhaErr;
+
+        let rows: AfdRow[] = [];
+
+        if (equip.tipo_conexao === "rep_local") {
+          // REST API local do REP iDClass
+          const baseUrl = `https://${equip.host}:${equip.porta || 443}`;
+          const loginRes = await fetch(`${baseUrl}/session_login.fcgi`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ login: equip.usuario || "admin", password: senhaPlana || "" }),
+          });
+          if (!loginRes.ok) throw new Error(`Login REP falhou: ${loginRes.status}`);
+          const loginData = await loginRes.json();
+          const session = loginData.session;
+
+          const afdRes = await fetch(`${baseUrl}/get_afd.fcgi?session=${session}&mode=full`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ initial_nsr: ultimoNsr + 1 }),
+          });
+          if (!afdRes.ok) throw new Error(`get_afd falhou: ${afdRes.status}`);
+          const afdText = await afdRes.text();
+          // Parse AFD: cada linha = NSR(9) tipo(1) datahora(yyyymmddhhmm) ...
+          rows = afdText.split("\n").map((line) => {
+            const m = line.match(/^(\d{9})(\d)(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(.*)$/);
+            if (!m) return null;
+            const [, nsr, , y, mo, d, h, mi, rest] = m;
+            const cpf = (rest.match(/\d{11}/) || [""])[0];
+            return {
+              nsr: Number(nsr),
+              data_hora: `${y}-${mo}-${d}T${h}:${mi}:00`,
+              cpf,
+            } as AfdRow;
+          }).filter(Boolean) as AfdRow[];
+        } else {
+          // iDCloud MySQL
+          const mysql = await new MySQLClient().connect({
+            hostname: equip.host,
+            port: Number(equip.porta || 3306),
+            username: equip.usuario || "",
+            password: senhaPlana || "",
+            db: equip.descricao && equip.descricao.startsWith("db:") ? equip.descricao.slice(3) : "idcloud",
+          });
+          rows = await mysql.query(
+            `SELECT nsr, data_hora, pis, cpf, matricula, tipo
+             FROM afd
+             WHERE nsr > ?
+             ${equip.numero_serie ? "AND (numero_serie = ? OR equipamento = ?)" : ""}
+             ORDER BY nsr ASC LIMIT ?`,
+            equip.numero_serie
+              ? [ultimoNsr, equip.numero_serie, equip.numero_serie, limit]
+              : [ultimoNsr, limit],
+          ) as AfdRow[];
+          await mysql.close();
+        }
 
         let maiorNsr = ultimoNsr;
         const inserts: any[] = [];
@@ -131,7 +165,6 @@ Deno.serve(async (req) => {
         }
 
         if (inserts.length > 0) {
-          // Insere em lotes de 500, ignorando duplicatas (constraint unique em equipamento_id+nsr)
           for (let i = 0; i < inserts.length; i += 500) {
             const batch = inserts.slice(i, i + 500);
             const { error: insErr } = await supabase
@@ -154,8 +187,6 @@ Deno.serve(async (req) => {
         relatorio.erros.push(`${equip.nome}: ${e.message || String(e)}`);
       }
     }
-
-    await mysql.close();
 
     return new Response(JSON.stringify(relatorio), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
