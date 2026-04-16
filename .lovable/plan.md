@@ -1,30 +1,36 @@
 
 
-## Plano: Importação em massa dos documentos do Google Drive
+## Plano: Aplicar foto 3x4 ao perfil de cada funcionário
 
-### Situação atual
-- 559 funcionários com links do Google Drive nos dados de admissão
-- 8 documentos já importados (testes anteriores)
-- Edge function `import-drive-files` já existe e suporta modo em lote (sem parâmetro `cpf`)
+### Situação
+- 508 funcionários têm `foto_3x4` no bucket `funcionarios-documentos` (path `{cpf}/foto_3x4.{ext}`)
+- 0 dos 620 registros de `admissoes` têm `foto_url` preenchido
+- O sistema exibe a foto em vários lugares (`AdminFuncionarios`, `FichaFuncionalDialog`, `PortalMeusDados`) lendo de `admissoes.foto_url` no bucket `funcionarios-fotos`
 
 ### O que será feito
 
-**1. Deploy e execução da edge function em massa**
-- Fazer deploy da função `import-drive-files`
-- Executar via `curl` sem parâmetro `cpf` para processar todos os 559 funcionários
-- A função vai varrer todos os campos `dados` buscando URLs do Drive, baixar cada arquivo e salvar no bucket `funcionarios-documentos`
-- Timeout pode ser aumentado se necessário (muitos arquivos)
+**1. Edge function `apply-foto-perfil`** (uma única execução em massa)
+- Busca todos os registros em `funcionario_documentos` com `tipo_documento = 'foto_3x4'`
+- Para cada CPF:
+  - Baixa o arquivo de `funcionarios-documentos/{cpf}/foto_3x4.{ext}`
+  - Faz upload para `funcionarios-fotos/{cpf}.{ext}` (mesma convenção já usada no upload manual)
+  - Atualiza `admissoes.foto_url = '{cpf}.{ext}'` para todos os registros do CPF
+- Pula arquivos `.bin` (content-type desconhecido — não vão renderizar como imagem)
+- Suporta `limit`/`offset` para processar em lotes (~50 por vez) e evitar timeout
+- Retorna relatório: sucesso, erros, ignorados
 
-**2. Remover botão "Importar do Drive" da Ficha Funcional**
-- Remover a seção de importação manual do `FichaFuncionalDialog.tsx`
-- Manter apenas a listagem de documentos já importados com botão de download/visualização
+**2. Botão na tela de admin de Funcionários**
+- "Aplicar Fotos 3x4 ao Perfil" com barra de progresso (mesmo padrão do botão de importar Drive)
+- Processa em lotes de 50, com possibilidade de cancelar
+- Ao terminar, invalida cache para mostrar fotos imediatamente
 
-### Limitações
-- Arquivos privados no Drive não serão baixados
-- Arquivos >100MB podem falhar
-- Com 559 funcionários, o processo pode exceder o timeout da edge function (padrão ~60s). Se necessário, será ajustado para processar em lotes
+### Resultado esperado
+- Após executar, ~508 funcionários terão foto de perfil visível em:
+  - Lista de funcionários (admin)
+  - Ficha funcional
+  - Portal "Meus Dados" do funcionário
 
-### Arquivos alterados
-- `src/components/admin/FichaFuncionalDialog.tsx` — remover botão de importação manual
-- Deploy + execução de `supabase/functions/import-drive-files`
+### Arquivos
+- `supabase/functions/apply-foto-perfil/index.ts` (novo)
+- `src/components/admin/AdminFuncionarios.tsx` (botão + progresso)
 
