@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Search, Users, UserX, Eye, Trash2, CloudDownload } from "lucide-react";
+import { Loader2, Search, Users, UserX, Eye, Trash2, CloudDownload, ImageIcon } from "lucide-react";
 import { FichaFuncionalDialog } from "./FichaFuncionalDialog";
 import { toast } from "sonner";
 import {
@@ -44,7 +44,9 @@ export function AdminFuncionarios() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [importStatus, setImportStatus] = useState<{ running: boolean; progress: number; total: number; success: number; errors: number; already: number } | null>(null);
+  const [fotoStatus, setFotoStatus] = useState<{ running: boolean; processed: number; success: number; errors: number; skipped: number } | null>(null);
   const importAbortRef = useRef(false);
+  const fotoAbortRef = useRef(false);
   const queryClient = useQueryClient();
 
   const { data: admissoes, isLoading: loadingAdmissoes } = useQuery({
@@ -211,6 +213,44 @@ export function AdminFuncionarios() {
     queryClient.invalidateQueries({ queryKey: ["admin-admissoes-func"] });
   }, [funcionarios.length, queryClient]);
 
+  const handleApplyFotos = useCallback(async () => {
+    fotoAbortRef.current = false;
+    setFotoStatus({ running: true, processed: 0, success: 0, errors: 0, skipped: 0 });
+    let totalSuccess = 0, totalErrors = 0, totalSkipped = 0, totalProcessed = 0;
+    const batchSize = 50;
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore && !fotoAbortRef.current) {
+      try {
+        const { data, error } = await supabase.functions.invoke("apply-foto-perfil", {
+          body: { limit: batchSize, offset },
+        });
+        if (error) {
+          totalErrors += batchSize;
+          hasMore = false;
+        } else {
+          const r = data as any;
+          totalProcessed += r.processed || 0;
+          totalSuccess += r.success || 0;
+          totalErrors += r.errors || 0;
+          totalSkipped += r.skipped || 0;
+          hasMore = !!r.hasMore;
+          offset += batchSize;
+        }
+      } catch {
+        totalErrors += batchSize;
+        hasMore = false;
+      }
+      setFotoStatus({ running: hasMore, processed: totalProcessed, success: totalSuccess, errors: totalErrors, skipped: totalSkipped });
+    }
+
+    setFotoStatus(prev => prev ? { ...prev, running: false } : null);
+    toast.success(`Fotos aplicadas: ${totalSuccess} sucesso, ${totalSkipped} ignoradas, ${totalErrors} erros.`);
+    queryClient.invalidateQueries({ queryKey: ["admin-admissoes-func"] });
+  }, [queryClient]);
+
+
   const renderTable = (list: any[], showDemissao = false) => {
     if (!list.length) {
       return <p className="text-muted-foreground text-center py-4">Nenhum funcionário encontrado.</p>;
@@ -325,6 +365,20 @@ export function AdminFuncionarios() {
             <Button
               size="sm"
               variant="outline"
+              onClick={handleApplyFotos}
+              disabled={fotoStatus?.running}
+              className="gap-1"
+            >
+              {fotoStatus?.running ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ImageIcon className="h-4 w-4" />
+              )}
+              Aplicar Fotos 3x4
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={handleBulkImport}
               disabled={importStatus?.running}
               className="gap-1"
@@ -357,6 +411,26 @@ export function AdminFuncionarios() {
           </div>
         </CardHeader>
         <CardContent>
+          {fotoStatus && (
+            <div className="mb-4 space-y-2 p-3 border rounded-lg bg-muted/30">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">
+                  {fotoStatus.running ? "Aplicando fotos 3x4 ao perfil..." : "Aplicação de fotos concluída"}
+                </span>
+                <span className="text-muted-foreground">{fotoStatus.processed} processadas</span>
+              </div>
+              <div className="flex gap-4 text-xs text-muted-foreground">
+                <span className="text-green-600">✓ {fotoStatus.success} aplicadas</span>
+                <span>⏭ {fotoStatus.skipped} ignoradas</span>
+                {fotoStatus.errors > 0 && <span className="text-destructive">✗ {fotoStatus.errors} erros</span>}
+              </div>
+              {fotoStatus.running && (
+                <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { fotoAbortRef.current = true; }}>
+                  Cancelar
+                </Button>
+              )}
+            </div>
+          )}
           {importStatus && (
             <div className="mb-4 space-y-2 p-3 border rounded-lg bg-muted/30">
               <div className="flex items-center justify-between text-sm">
