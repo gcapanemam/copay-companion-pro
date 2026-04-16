@@ -1,64 +1,65 @@
 
 
-## Plan: Modern Layout Redesign
+## Plan: Migrar documentos do Google Drive para o armazenamento do sistema
 
-### Current State
-Both the admin panel (Index.tsx) and the employee portal (MinhaArea.tsx) use a basic horizontal tabs layout with 9-12 tabs crammed into a single row. On mobile, tabs overflow horizontally. The design is functional but feels crowded and dated.
+### O que acontece
 
-### What Changes
+Um processo automatizado varre todos os registros de `admissoes`, identifica links do Google Drive no campo `dados`, baixa cada arquivo e armazena no bucket do sistema. Os links originais são substituídos pelas URLs do armazenamento próprio.
 
-**1. Admin Panel (Index.tsx) — Sidebar Navigation**
-- Replace the horizontal `Tabs` with a collapsible sidebar using the existing `Sidebar` component
-- Sidebar shows icons + labels, collapses to icon-only on mobile
-- Header becomes a slim top bar with the sidebar trigger, app title, and user actions (manage passwords, logout)
-- Content area fills the remaining space with better spacing
-- Active section highlighted in sidebar with accent color
-- Group navigation items logically: Dashboard, People (Funcionarios, Admissao), Documents (Contracheques, VT, Ponto), Benefits (Plano, EPIs), Communication (Comunicados, Chat, Tarefas), Settings
+### Requisitos
 
-**2. Employee Portal (MinhaArea.tsx) — Sidebar Navigation**
-- Same sidebar pattern but with fewer items (9 tabs)
-- Employee name and avatar area at the top of sidebar
-- Year selector moved into sidebar footer or header area
-- Clean content area with more breathing room
+- Os arquivos no Google Drive **devem** estar com compartilhamento "Qualquer pessoa com o link"
 
-**3. Color Palette Refresh (index.css)**
-- Update primary color to a modern blue (`217 91% 60%`) instead of the current dark navy
-- Add subtle gradient to sidebar background
-- Improve card shadows and border radius for a softer feel
-- Add chart color variables for consistency
+### Mudanças
 
-**4. Login Pages (Login.tsx, MinhaArea.tsx login)**
-- Add a subtle gradient background or pattern
-- Slightly larger card with more padding
-- Polished input styling
+**1. Novo bucket `funcionarios-documentos`** (migration)
+- Bucket público para documentos de funcionários
 
-### Technical Details
+**2. Nova tabela `funcionario_documentos`** (migration)
+- Colunas: `id`, `cpf`, `tipo_documento`, `nome_arquivo`, `arquivo_url`, `drive_url_original`, `created_at`
+- RLS: anon SELECT, authenticated ALL
 
-- **Files modified**: `src/pages/Index.tsx`, `src/pages/MinhaArea.tsx`, `src/pages/Login.tsx`, `src/index.css`
-- **Pattern**: Uses existing `SidebarProvider`, `Sidebar`, `SidebarContent`, `SidebarMenu` etc. from `@/components/ui/sidebar`
-- **State management**: Replace `Tabs` with a `useState` for active section, render content conditionally
-- **Responsive**: Sidebar uses `collapsible="icon"` on desktop, `collapsible="offcanvas"` behavior on mobile via `SidebarTrigger`
-- **No breaking changes**: All existing component imports and functionality remain intact, only the navigation wrapper changes
+**3. Edge function `import-drive-files`**
+- Recebe: `{ cpf }` (ou sem parâmetros para processar todos)
+- Varre o campo `dados` do registro de admissão buscando URLs que contenham `drive.google.com`
+- Para cada link encontrado:
+  - Extrai o file ID da URL
+  - Baixa via `https://drive.google.com/uc?export=download&id=FILE_ID`
+  - Faz upload para o bucket `funcionarios-documentos` com path `{cpf}/{tipo_documento}`
+  - Registra na tabela `funcionario_documentos`
+- Retorna relatório de sucesso/falha por arquivo
 
-### Visual Structure (Admin)
+**4. UI na Ficha Funcional -- seção "Documentos"**
+- Lista documentos já migrados com botão de download
+- Botão "Importar do Drive" para disparar migração individual
+- Botão no admin para migração em lote de todos os funcionários
+- Status visual (importado/pendente/erro)
+
+### Fluxo
 
 ```text
-+------------------+------------------------------------------+
-| [Logo] Portal RH |  [Senhas] [Sair]                         |
-+--------+---------+------------------------------------------+
-|        |                                                     |
-| Dash   |   [Active Section Content]                          |
-| Func   |                                                     |
-| Contra |                                                     |
-| VT     |                                                     |
-| Ponto  |                                                     |
-| Plano  |                                                     |
-| EPIs   |                                                     |
-| Comun  |                                                     |
-| Chat 3 |                                                     |
-| Taref  |                                                     |
-| Admis  |                                                     |
-| Config |                                                     |
-+--------+-----------------------------------------------------+
+Admin clica "Importar Documentos do Drive"
+        |
+        v
+Edge Function varre dados JSON → encontra links drive
+        |
+        v
+Baixa arquivo via fetch() → Upload no bucket
+        |
+        v
+Registra na tabela funcionario_documentos
+        |
+        v
+UI mostra documentos com download nativo
 ```
+
+### Limitações
+- Arquivos >100MB podem falhar (interstitial do Google)
+- Arquivos privados no Drive não serão baixados
+- O processo pode levar alguns minutos para muitos funcionários
+
+### Detalhes técnicos
+- Edge function usa `fetch()` para download e Supabase Storage SDK para upload
+- Extração de ID via regex de URLs como `/open?id=XXX`, `/file/d/XXX/`
+- Campos identificados: `rg_1`, `cpf`, `foto_3x4`, `comprovante_de_resid_ncia`, `certid_o_de_nascimento_ou_casamento`, `diploma_s_enviar_todos_que_possui`, `t_tulo_de_eleitor_incluir_comprovante_ltima_vota_o`, `foto_da_1a_foto_e_2a_dados_da_carteira_de_trabalho`, `certid_o_de_nascimento_dos_filhos_caso_tenha`, `cpf_dependentes`
 
