@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Activity, LogOut, Printer, Heart, FileText, ShieldCheck, Bus, CalendarX, User, Megaphone, MessageCircle, ListTodo } from "lucide-react";
+import { Activity, LogOut, Printer, Heart, FileText, ShieldCheck, Bus, CalendarX, User, Megaphone, MessageCircle, ListTodo, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +18,7 @@ import { PortalMeusDados } from "@/components/portal/PortalMeusDados";
 import { PortalComunicados } from "@/components/portal/PortalComunicados";
 import { ChatContainer } from "@/components/chat/ChatContainer";
 import { PortalTarefas } from "@/components/portal/PortalTarefas";
+import { PortalMeuPonto } from "@/components/portal/PortalMeuPonto";
 import { useUnreadCounts } from "@/hooks/useUnreadCounts";
 import {
   SidebarProvider, SidebarTrigger,
@@ -42,7 +43,7 @@ interface Mensalidade { mes: number; valor: number; }
 interface CopartItem { procedimento: string; local: string | null; quantidade: number; valor: number; }
 interface Coparticipacao { mes: number; data_utilizacao: string | null; coparticipacao_itens: CopartItem[]; }
 
-type Section = "dados" | "plano" | "contracheques" | "epis" | "vt" | "faltas" | "comunicados" | "tarefas" | "chat";
+type Section = "dados" | "plano" | "contracheques" | "epis" | "vt" | "faltas" | "meu_ponto" | "comunicados" | "tarefas" | "chat";
 
 const portalNavGroups = [
   {
@@ -57,6 +58,7 @@ const portalNavGroups = [
       { id: "contracheques" as Section, label: "Contracheques", icon: FileText },
       { id: "vt" as Section, label: "Vale Transporte", icon: Bus },
       { id: "faltas" as Section, label: "Ponto", icon: CalendarX },
+      { id: "meu_ponto" as Section, label: "Meu Ponto", icon: Clock },
     ],
   },
   {
@@ -549,6 +551,7 @@ const MinhaArea = () => {
       case "epis": return <PortalEPIs epis={epis} />;
       case "vt": return <PortalValeTransporte valeTransporte={valeTransporte} />;
       case "faltas": return <PortalFaltas faltas={faltas} registrosPonto={registrosPonto} />;
+      case "meu_ponto": return <PortalMeuPonto cpf={userCpf} />;
       case "comunicados": return <PortalComunicados comunicados={comunicados} cpf={userCpf} unidade={admissao?.unidade} departamento={admissao?.departamento} />;
       case "tarefas": return <PortalTarefas cpf={userCpf} departamento={admissao?.departamento} unidade={admissao?.unidade} />;
       case "chat": return <ChatContainer meuCpf={userCpf} />;
