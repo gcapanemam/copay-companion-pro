@@ -653,8 +653,8 @@ export function AdminFaltas() {
                   <Select value={cpf} onValueChange={setCpf}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
-                      {(beneficiarios || []).map((b) => (
-                        <SelectItem key={b.cpf} value={b.cpf!}>{b.nome}</SelectItem>
+                      {[...(beneficiarios || new Map<string, string>()).entries()].map(([cpfVal, nome]) => (
+                        <SelectItem key={cpfVal} value={cpfVal}>{nome}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
