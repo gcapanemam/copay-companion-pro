@@ -103,7 +103,7 @@ export function FichaFuncionalDialog({ funcionario, open, onClose }: FichaFuncio
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [importingDrive, setImportingDrive] = useState(false);
+  
   const fileRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -242,41 +242,6 @@ export function FichaFuncionalDialog({ funcionario, open, onClose }: FichaFuncio
     }
   };
 
-  // Count Drive links in dados
-  const driveLinksCount = funcionario?.admissao?.dados
-    ? Object.values(funcionario.admissao.dados as Record<string, unknown>).filter(
-        (v) => typeof v === "string" && v.includes("drive.google.com")
-      ).length
-    : 0;
-
-  const handleImportDrive = async () => {
-    if (!funcionario?.cpf) return;
-    setImportingDrive(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("import-drive-files", {
-        body: { cpf: funcionario.cpf },
-      });
-      if (error) throw error;
-      const result = data as any;
-      if (result.success > 0) {
-        toast.success(`${result.success} documento(s) importado(s) com sucesso!`);
-      }
-      if (result.already_imported > 0) {
-        toast.info(`${result.already_imported} já importado(s) anteriormente.`);
-      }
-      if (result.errors > 0) {
-        toast.warning(`${result.errors} erro(s) na importação. Verifique se os arquivos estão públicos no Drive.`);
-      }
-      if (result.total === 0) {
-        toast.info("Nenhum link do Google Drive encontrado nos dados.");
-      }
-      refetchDocs();
-    } catch (err: any) {
-      toast.error("Erro ao importar: " + err.message);
-    } finally {
-      setImportingDrive(false);
-    }
-  };
 
   const handleDeleteDoc = async (docId: string, arquivoUrl: string) => {
     try {
@@ -476,33 +441,13 @@ export function FichaFuncionalDialog({ funcionario, open, onClose }: FichaFuncio
           )}
 
           {/* Documentos section */}
-          <div className="border rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
+          {(documentos?.length || 0) > 0 && (
+            <div className="border rounded-lg p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Download className="h-4 w-4 text-primary" />
                 <h3 className="font-semibold text-sm text-muted-foreground">Documentos</h3>
-                {(documentos?.length || 0) > 0 && (
-                  <Badge variant="secondary" className="text-xs">{documentos!.length}</Badge>
-                )}
+                <Badge variant="secondary" className="text-xs">{documentos!.length}</Badge>
               </div>
-              {driveLinksCount > 0 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleImportDrive}
-                  disabled={importingDrive}
-                >
-                  {importingDrive ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                  ) : (
-                    <CloudDownload className="h-4 w-4 mr-1" />
-                  )}
-                  Importar do Drive ({driveLinksCount})
-                </Button>
-              )}
-            </div>
-
-            {(documentos?.length || 0) > 0 ? (
               <div className="space-y-2">
                 {documentos!.map((doc: any) => {
                   const publicUrl = getDocPublicUrl(doc.arquivo_url);
@@ -538,14 +483,8 @@ export function FichaFuncionalDialog({ funcionario, open, onClose }: FichaFuncio
                   );
                 })}
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {driveLinksCount > 0
-                  ? "Nenhum documento importado ainda. Clique em \"Importar do Drive\" para começar."
-                  : "Nenhum documento encontrado."}
-              </p>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

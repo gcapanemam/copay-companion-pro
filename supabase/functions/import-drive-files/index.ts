@@ -7,13 +7,10 @@ const corsHeaders = {
 };
 
 function extractDriveFileId(url: string): string | null {
-  // /file/d/FILE_ID/
   let m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
   if (m) return m[1];
-  // open?id=FILE_ID
   m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (m) return m[1];
-  // /uc?...id=FILE_ID
   m = url.match(/\/uc\?.*id=([a-zA-Z0-9_-]+)/);
   if (m) return m[1];
   return null;
@@ -35,11 +32,15 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const targetCpf: string | undefined = body.cpf;
+    const limit: number = body.limit || 50;
+    const offset: number = body.offset || 0;
 
     // Fetch admissoes
     let query = supabase.from("admissoes").select("id, cpf, dados");
     if (targetCpf) {
       query = query.eq("cpf", targetCpf);
+    } else {
+      query = query.range(offset, offset + limit - 1);
     }
     const { data: admissoes, error: fetchErr } = await query;
     if (fetchErr) throw fetchErr;
@@ -79,7 +80,6 @@ Deno.serve(async (req) => {
         }
 
         try {
-          // Download from Google Drive
           const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
           const driveResp = await fetch(downloadUrl, { redirect: "follow" });
 
@@ -91,7 +91,6 @@ Deno.serve(async (req) => {
           const contentType = driveResp.headers.get("content-type") || "application/octet-stream";
           const fileBytes = new Uint8Array(await driveResp.arrayBuffer());
 
-          // Determine extension from content type
           const extMap: Record<string, string> = {
             "image/jpeg": "jpg",
             "image/png": "png",
@@ -103,7 +102,6 @@ Deno.serve(async (req) => {
           const fileName = `${campo}.${ext}`;
           const storagePath = `${adm.cpf}/${fileName}`;
 
-          // Upload to storage
           const { error: uploadErr } = await supabase.storage
             .from("funcionarios-documentos")
             .upload(storagePath, fileBytes, {
@@ -116,12 +114,6 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          // Get public URL
-          const { data: urlData } = supabase.storage
-            .from("funcionarios-documentos")
-            .getPublicUrl(storagePath);
-
-          // Insert record
           const { error: insertErr } = await supabase
             .from("funcionario_documentos")
             .insert({
@@ -149,6 +141,7 @@ Deno.serve(async (req) => {
       success: results.filter((r) => r.status === "success").length,
       already_imported: results.filter((r) => r.status === "already_imported").length,
       errors: results.filter((r) => r.status === "error").length,
+      batch: { limit, offset, fetched: admissoes?.length || 0 },
       details: results,
     };
 
