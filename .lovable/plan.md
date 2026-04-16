@@ -1,36 +1,65 @@
 
 
-## Plano: Aplicar foto 3x4 ao perfil de cada funcionário
+## Plano: Integração com relógio Control iD via iDCloud
 
-### Situação
-- 508 funcionários têm `foto_3x4` no bucket `funcionarios-documentos` (path `{cpf}/foto_3x4.{ext}`)
-- 0 dos 620 registros de `admissoes` têm `foto_url` preenchido
-- O sistema exibe a foto em vários lugares (`AdminFuncionarios`, `FichaFuncionalDialog`, `PortalMeusDados`) lendo de `admissoes.foto_url` no bucket `funcionarios-fotos`
+### Contexto da imagem
+O equipamento mostrado é um **REP iDClass (REP-C)**, série `00014003750021988`, com **iDCloud habilitado** e comunicação ativa nas últimas 24h. Isso confirma que o caminho viável é **via iDCloud** (não comunicação direta com IP local `192.168.000.023`, que é endereço de rede interna do cliente).
 
-### O que será feito
+### Arquitetura proposta
 
-**1. Edge function `apply-foto-perfil`** (uma única execução em massa)
-- Busca todos os registros em `funcionario_documentos` com `tipo_documento = 'foto_3x4'`
-- Para cada CPF:
-  - Baixa o arquivo de `funcionarios-documentos/{cpf}/foto_3x4.{ext}`
-  - Faz upload para `funcionarios-fotos/{cpf}.{ext}` (mesma convenção já usada no upload manual)
-  - Atualiza `admissoes.foto_url = '{cpf}.{ext}'` para todos os registros do CPF
-- Pula arquivos `.bin` (content-type desconhecido — não vão renderizar como imagem)
-- Suporta `limit`/`offset` para processar em lotes (~50 por vez) e evitar timeout
-- Retorna relatório: sucesso, erros, ignorados
+```text
+[Relógio REP-C] → push → [iDCloud MySQL] ← pull ← [Edge Function] → [registros_ponto]
+```
 
-**2. Botão na tela de admin de Funcionários**
-- "Aplicar Fotos 3x4 ao Perfil" com barra de progresso (mesmo padrão do botão de importar Drive)
-- Processa em lotes de 50, com possibilidade de cancelar
-- Ao terminar, invalida cache para mostrar fotos imediatamente
+### O que será construído
 
-### Resultado esperado
-- Após executar, ~508 funcionários terão foto de perfil visível em:
-  - Lista de funcionários (admin)
-  - Ficha funcional
-  - Portal "Meus Dados" do funcionário
+**1. Migração de banco**
+- Tabela `equipamentos_ponto`: cadastro dos relógios (nome, modelo, número de série, NSR, última sincronização)
+- Tabela `registros_ponto`: marcações importadas (cpf, data_hora, nsr, equipamento_id, tipo)
+- Tabela `idcloud_config`: credenciais MySQL do iDCloud (host, porta, user, password, database) — criptografadas via secrets
+- RLS: apenas admins acessam
+
+**2. Edge function `sync-controlid`**
+- Conecta no MySQL do iDCloud usando driver Deno (`https://deno.land/x/mysql`)
+- Lê tabela `afd` filtrando por NSR > último importado
+- Faz match por CPF com `admissoes` e insere em `registros_ponto`
+- Atualiza `equipamentos_ponto.ultimo_nsr` e `ultima_sincronizacao`
+- Retorna relatório (novos registros, erros, CPFs não encontrados)
+
+**3. UI no Admin**
+- Nova aba "Ponto Eletrônico" no `AdminDashboard`
+- Lista de equipamentos cadastrados com status (online/offline baseado em última comunicação)
+- Botão "Sincronizar Agora" por equipamento + botão "Sincronizar Todos"
+- Tabela de últimas marcações com filtros (funcionário, data, equipamento)
+- Formulário de cadastro do relógio + configuração iDCloud (credenciais MySQL)
+
+**4. UI no Portal do Funcionário**
+- Nova seção "Meu Ponto" mostrando últimas marcações do funcionário logado
+
+### Pré-requisitos do usuário
+Antes de implementar, preciso que você tenha em mãos:
+1. **Credenciais MySQL do iDCloud** (host, porta, usuário, senha, nome do banco) — fornecidas pelo time comercial da Control iD
+2. **Liberação de IP** no firewall do iDCloud (precisaremos do IP de saída do Supabase, posso fornecer depois do deploy)
+
+### Secrets necessários
+- `IDCLOUD_MYSQL_HOST`
+- `IDCLOUD_MYSQL_PORT`
+- `IDCLOUD_MYSQL_USER`
+- `IDCLOUD_MYSQL_PASSWORD`
+- `IDCLOUD_MYSQL_DATABASE`
+
+### Detalhes técnicos
+- Driver MySQL: `https://deno.land/x/mysql@v2.12.1/mod.ts`
+- Sincronização incremental por NSR (Número Sequencial do Registro) para não duplicar
+- Cron job opcional (pg_cron) para sincronizar automaticamente a cada 15min
+- Se cliente usa múltiplos relógios, todos vão pra mesma instância iDCloud — basta uma conexão MySQL para puxar tudo
 
 ### Arquivos
-- `supabase/functions/apply-foto-perfil/index.ts` (novo)
-- `src/components/admin/AdminFuncionarios.tsx` (botão + progresso)
+- `supabase/migrations/` (novas tabelas)
+- `supabase/functions/sync-controlid/index.ts` (novo)
+- `src/components/admin/AdminPontoEletronico.tsx` (novo)
+- `src/components/admin/EquipamentoFormDialog.tsx` (novo)
+- `src/components/portal/PortalMeuPonto.tsx` (novo)
+- `src/components/admin/AdminDashboard.tsx` (adicionar aba)
+- `src/pages/MinhaArea.tsx` (adicionar aba)
 
