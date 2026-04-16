@@ -242,7 +242,58 @@ export function FichaFuncionalDialog({ funcionario, open, onClose }: FichaFuncio
     }
   };
 
-  // Get dynamic campos that aren't already in fixed fields
+  // Count Drive links in dados
+  const driveLinksCount = funcionario?.admissao?.dados
+    ? Object.values(funcionario.admissao.dados as Record<string, unknown>).filter(
+        (v) => typeof v === "string" && v.includes("drive.google.com")
+      ).length
+    : 0;
+
+  const handleImportDrive = async () => {
+    if (!funcionario?.cpf) return;
+    setImportingDrive(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("import-drive-files", {
+        body: { cpf: funcionario.cpf },
+      });
+      if (error) throw error;
+      const result = data as any;
+      if (result.success > 0) {
+        toast.success(`${result.success} documento(s) importado(s) com sucesso!`);
+      }
+      if (result.already_imported > 0) {
+        toast.info(`${result.already_imported} já importado(s) anteriormente.`);
+      }
+      if (result.errors > 0) {
+        toast.warning(`${result.errors} erro(s) na importação. Verifique se os arquivos estão públicos no Drive.`);
+      }
+      if (result.total === 0) {
+        toast.info("Nenhum link do Google Drive encontrado nos dados.");
+      }
+      refetchDocs();
+    } catch (err: any) {
+      toast.error("Erro ao importar: " + err.message);
+    } finally {
+      setImportingDrive(false);
+    }
+  };
+
+  const handleDeleteDoc = async (docId: string, arquivoUrl: string) => {
+    try {
+      await supabase.storage.from("funcionarios-documentos").remove([arquivoUrl]);
+      await supabase.from("funcionario_documentos").delete().eq("id", docId);
+      toast.success("Documento excluído.");
+      refetchDocs();
+    } catch (err: any) {
+      toast.error("Erro ao excluir: " + err.message);
+    }
+  };
+
+  const getDocPublicUrl = (path: string) => {
+    const { data } = supabase.storage.from("funcionarios-documentos").getPublicUrl(path);
+    return data?.publicUrl || "";
+  };
+
   const dynamicCampos = (campos || []).filter(c => !FIXED_KEYS.has(c.campo_nome));
 
   // Group dynamic campos
