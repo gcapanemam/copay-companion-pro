@@ -243,14 +243,24 @@ export function AdminFaltas() {
   });
 
   const { data: beneficiarios } = useQuery({
-    queryKey: ["beneficiarios-list"],
+    queryKey: ["beneficiarios-list-ponto"],
     queryFn: async () => {
-      const { data: t } = await supabase.from("titulares").select("nome, cpf").not("cpf", "is", null).order("nome");
-      return t || [];
+      const { data: titularesData } = await supabase.from("titulares").select("nome, cpf").not("cpf", "is", null).order("nome");
+      const { data: admissoesData } = await supabase.from("admissoes").select("nome_completo, cpf").order("nome_completo");
+      const mapa = new Map<string, string>();
+      for (const a of admissoesData || []) {
+        const c = normalizeCpf(a.cpf);
+        if (c) mapa.set(c, a.nome_completo);
+      }
+      for (const t of titularesData || []) {
+        const c = normalizeCpf(t.cpf);
+        if (c) mapa.set(c, t.nome);
+      }
+      return mapa;
     },
   });
 
-  const getNome = (cpfVal: string) => (beneficiarios || []).find(x => normalizeCpf(x.cpf) === cpfVal)?.nome || cpfVal;
+  const getNome = (cpfVal: string) => beneficiarios?.get(cpfVal) || cpfVal;
 
   const pontoAgrupado = useMemo(() => {
     const grupos = new Map<string, { cpf: string; nome: string; registros: any[]; meses: Map<string, any[]> }>();
@@ -643,8 +653,8 @@ export function AdminFaltas() {
                   <Select value={cpf} onValueChange={setCpf}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
-                      {(beneficiarios || []).map((b) => (
-                        <SelectItem key={b.cpf} value={b.cpf!}>{b.nome}</SelectItem>
+                      {[...(beneficiarios || new Map<string, string>()).entries()].map(([cpfVal, nome]) => (
+                        <SelectItem key={cpfVal} value={cpfVal}>{nome}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
