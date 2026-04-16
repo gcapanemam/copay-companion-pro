@@ -411,6 +411,26 @@ export function AdminFuncionarios() {
           </div>
         </CardHeader>
         <CardContent>
+          {fotoStatus && (
+            <div className="mb-4 space-y-2 p-3 border rounded-lg bg-muted/30">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">
+                  {fotoStatus.running ? "Aplicando fotos 3x4 ao perfil..." : "Aplicação de fotos concluída"}
+                </span>
+                <span className="text-muted-foreground">{fotoStatus.processed} processadas</span>
+              </div>
+              <div className="flex gap-4 text-xs text-muted-foreground">
+                <span className="text-green-600">✓ {fotoStatus.success} aplicadas</span>
+                <span>⏭ {fotoStatus.skipped} ignoradas</span>
+                {fotoStatus.errors > 0 && <span className="text-destructive">✗ {fotoStatus.errors} erros</span>}
+              </div>
+              {fotoStatus.running && (
+                <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { fotoAbortRef.current = true; }}>
+                  Cancelar
+                </Button>
+              )}
+            </div>
+          )}
           {importStatus && (
             <div className="mb-4 space-y-2 p-3 border rounded-lg bg-muted/30">
               <div className="flex items-center justify-between text-sm">
