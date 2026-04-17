@@ -158,9 +158,10 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
         </DialogHeader>
 
         <Tabs defaultValue="geral" className="w-full">
-          <TabsList className="grid grid-cols-2 w-full">
+          <TabsList className="grid grid-cols-3 w-full">
             <TabsTrigger value="geral">Informações Gerais</TabsTrigger>
-            <TabsTrigger value="conexao">Conexão</TabsTrigger>
+            <TabsTrigger value="conexao">Conexão Direta</TabsTrigger>
+            <TabsTrigger value="push">Modo Push</TabsTrigger>
           </TabsList>
 
           <TabsContent value="geral" className="space-y-4 pt-4">
