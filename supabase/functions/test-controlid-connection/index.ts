@@ -7,9 +7,34 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function isPrivateHost(host: string): boolean {
+  const h = host.replace(/\s/g, "");
+  // IPs privados RFC1918 + loopback + link-local (aceita zeros à esquerda como 192.168.000.023)
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const [a, b] = [Number(m[1]), Number(m[2])];
+    if (a === 10) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 127) return true;
+    if (a === 169 && b === 254) return true;
+  }
+  if (/^localhost$/i.test(h)) return true;
+  return false;
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`Timeout (${ms}ms) ao ${label}`)), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); })
+     .catch((e) => { clearTimeout(t); reject(e); });
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  const inicio = Date.now();
   try {
     const body = await req.json().catch(() => ({}));
     const { equipamento_id, host, porta, usuario, senha, tipo_conexao } = body;
@@ -19,7 +44,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Resolve credenciais: usa as enviadas, ou busca no banco se equipamento_id for fornecido
     let cHost = host, cPorta = porta, cUsuario = usuario, cSenha = senha, cTipo = tipo_conexao;
 
     if (equipamento_id && (!cHost || cSenha === undefined || cSenha === null || cSenha === "")) {
@@ -42,51 +66,63 @@ Deno.serve(async (req) => {
 
     if (!cHost) {
       return new Response(JSON.stringify({ ok: false, error: "Host/IP é obrigatório" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const inicio = Date.now();
+    // Bloquear cedo: IP privado não é alcançável a partir da nuvem
+    if (isPrivateHost(cHost)) {
+      return new Response(JSON.stringify({
+        ok: false,
+        modo: cTipo,
+        host: cHost,
+        latencia_ms: Date.now() - inicio,
+        error: "IP privado/local não é alcançável pela nuvem",
+        dica: "O endereço " + cHost + " é da rede interna do cliente. Para conectar via Lovable Cloud, exponha o equipamento por: (1) iDCloud com host público, ou (2) VPN/Cloudflare Tunnel/ngrok com endereço público.",
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     if (cTipo === "rep_local") {
       const baseUrl = `https://${cHost}:${cPorta || 443}`;
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 10000);
       try {
-        const res = await fetch(`${baseUrl}/session_login.fcgi`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ login: cUsuario || "admin", password: cSenha || "" }),
-          signal: ctrl.signal,
-        });
-        clearTimeout(t);
+        const res = await withTimeout(
+          fetch(`${baseUrl}/session_login.fcgi`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ login: cUsuario || "admin", password: cSenha || "" }),
+          }),
+          8000,
+          "fazer login no REP",
+        );
         if (!res.ok) {
           return new Response(JSON.stringify({
-            ok: false, error: `Login falhou: HTTP ${res.status}`, latencia_ms: Date.now() - inicio,
-          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            ok: false, modo: "rep_local", error: `Login falhou: HTTP ${res.status}`, latencia_ms: Date.now() - inicio,
+          }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
         const data = await res.json().catch(() => ({}));
         return new Response(JSON.stringify({
           ok: true, modo: "rep_local", sessao: data.session ? "obtida" : "ok", latencia_ms: Date.now() - inicio,
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       } catch (e: any) {
-        clearTimeout(t);
         return new Response(JSON.stringify({
-          ok: false, error: e.name === "AbortError" ? "Timeout (10s)" : e.message,
-        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          ok: false, modo: "rep_local", error: e.message, latencia_ms: Date.now() - inicio,
+        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
 
     // iDCloud MySQL
     try {
-      const mysql = await new MySQLClient().connect({
-        hostname: cHost,
-        port: Number(cPorta || 3306),
-        username: cUsuario || "",
-        password: cSenha || "",
-        db: "idcloud",
-        timeout: 10000,
-      });
+      const mysql = await withTimeout(
+        new MySQLClient().connect({
+          hostname: cHost,
+          port: Number(cPorta || 3306),
+          username: cUsuario || "",
+          password: cSenha || "",
+          db: "idcloud",
+        }),
+        8000,
+        "conectar ao MySQL",
+      );
       const ping = await mysql.query("SELECT 1 AS ok") as any[];
       let totalAfd: number | null = null;
       try {
@@ -102,12 +138,12 @@ Deno.serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     } catch (e: any) {
       return new Response(JSON.stringify({
-        ok: false, error: e.message || String(e), latencia_ms: Date.now() - inicio,
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        ok: false, modo: "idcloud_mysql", error: e.message || String(e), latencia_ms: Date.now() - inicio,
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
   } catch (err: any) {
-    return new Response(JSON.stringify({ ok: false, error: err.message || String(err) }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ ok: false, error: err.message || String(err), latencia_ms: Date.now() - inicio }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
