@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2, PlugZap } from "lucide-react";
 import { toast } from "sonner";
 
 interface Props {
