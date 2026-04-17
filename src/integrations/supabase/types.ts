@@ -507,6 +507,118 @@ export type Database = {
         }
         Relationships: []
       }
+      controlid_comandos: {
+        Row: {
+          body: Json | null
+          concluido_em: string | null
+          content_type: string
+          created_at: string
+          device_id_externo: string | null
+          endpoint: string
+          enviado_em: string | null
+          equipamento_id: string | null
+          erro: string | null
+          id: string
+          query_string: string | null
+          resultado: Json | null
+          status: string
+          uuid: string | null
+          verb: string
+        }
+        Insert: {
+          body?: Json | null
+          concluido_em?: string | null
+          content_type?: string
+          created_at?: string
+          device_id_externo?: string | null
+          endpoint: string
+          enviado_em?: string | null
+          equipamento_id?: string | null
+          erro?: string | null
+          id?: string
+          query_string?: string | null
+          resultado?: Json | null
+          status?: string
+          uuid?: string | null
+          verb?: string
+        }
+        Update: {
+          body?: Json | null
+          concluido_em?: string | null
+          content_type?: string
+          created_at?: string
+          device_id_externo?: string | null
+          endpoint?: string
+          enviado_em?: string | null
+          equipamento_id?: string | null
+          erro?: string | null
+          id?: string
+          query_string?: string | null
+          resultado?: Json | null
+          status?: string
+          uuid?: string | null
+          verb?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "controlid_comandos_equipamento_id_fkey"
+            columns: ["equipamento_id"]
+            isOneToOne: false
+            referencedRelation: "equipamentos_ponto"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      controlid_push_log: {
+        Row: {
+          body: Json | null
+          created_at: string
+          device_id_externo: string | null
+          equipamento_id: string | null
+          id: string
+          ip: string | null
+          metodo: string | null
+          query: Json | null
+          resposta: Json | null
+          tipo: string
+          user_agent: string | null
+        }
+        Insert: {
+          body?: Json | null
+          created_at?: string
+          device_id_externo?: string | null
+          equipamento_id?: string | null
+          id?: string
+          ip?: string | null
+          metodo?: string | null
+          query?: Json | null
+          resposta?: Json | null
+          tipo: string
+          user_agent?: string | null
+        }
+        Update: {
+          body?: Json | null
+          created_at?: string
+          device_id_externo?: string | null
+          equipamento_id?: string | null
+          id?: string
+          ip?: string | null
+          metodo?: string | null
+          query?: Json | null
+          resposta?: Json | null
+          tipo?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "controlid_push_log_equipamento_id_fkey"
+            columns: ["equipamento_id"]
+            isOneToOne: false
+            referencedRelation: "equipamentos_ponto"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coparticipacao_itens: {
         Row: {
           coparticipacao_id: string
@@ -669,6 +781,7 @@ export type Database = {
           ativo: boolean
           created_at: string
           descricao: string | null
+          device_id_externo: string | null
           host: string | null
           id: string
           modelo: string | null
@@ -687,6 +800,7 @@ export type Database = {
           ativo?: boolean
           created_at?: string
           descricao?: string | null
+          device_id_externo?: string | null
           host?: string | null
           id?: string
           modelo?: string | null
@@ -705,6 +819,7 @@ export type Database = {
           ativo?: boolean
           created_at?: string
           descricao?: string | null
+          device_id_externo?: string | null
           host?: string | null
           id?: string
           modelo?: string | null
