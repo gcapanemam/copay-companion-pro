@@ -132,6 +132,14 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
         p_senha: senha || null,
       });
       if (error) throw error;
+      // Persiste device_id_externo separadamente (não está na RPC)
+      const equipId = (data as string) || equipamento?.id;
+      if (equipId) {
+        await supabase
+          .from("equipamentos_ponto")
+          .update({ device_id_externo: deviceIdExterno.trim() || null })
+          .eq("id", equipId);
+      }
       toast.success(equipamento?.id ? "Equipamento atualizado" : "Equipamento cadastrado");
       onSaved();
       onOpenChange(false);
