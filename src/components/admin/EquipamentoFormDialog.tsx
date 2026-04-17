@@ -242,9 +242,15 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
               </div>
             </div>
 
-            <p className="text-xs text-muted-foreground">
-              A senha é armazenada criptografada e só é descriptografada no servidor durante a sincronização.
-            </p>
+            <div className="flex items-center justify-between gap-2 pt-2 border-t">
+              <p className="text-xs text-muted-foreground flex-1">
+                A senha é armazenada criptografada e só é descriptografada no servidor durante a sincronização.
+              </p>
+              <Button type="button" variant="secondary" size="sm" onClick={handleTestar} disabled={testando}>
+                {testando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlugZap className="h-4 w-4 mr-2" />}
+                Testar Conexão
+              </Button>
+            </div>
           </TabsContent>
         </Tabs>
 
