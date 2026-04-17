@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2, PlugZap } from "lucide-react";
 import { toast } from "sonner";
 
 interface Props {
@@ -41,6 +41,45 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  const [testando, setTestando] = useState(false);
+
+  const handleTestar = async () => {
+    if (!host.trim()) {
+      toast.error("Informe Host/IP antes de testar");
+      return;
+    }
+    const portaNum = porta ? Number(porta) : null;
+    setTestando(true);
+    const tid = toast.loading("Testando conexão...");
+    try {
+      const { data, error } = await supabase.functions.invoke("test-controlid-connection", {
+        body: {
+          equipamento_id: equipamento?.id ?? null,
+          host: host.trim(),
+          porta: portaNum,
+          usuario: usuario.trim() || null,
+          senha: senha || null,
+          tipo_conexao: tipoConexao,
+        },
+      });
+      if (error) throw error;
+      toast.dismiss(tid);
+      if (data?.ok) {
+        const detalhes = [
+          `${data.latencia_ms}ms`,
+          data.registros_afd != null ? `${data.registros_afd} marcações no AFD` : null,
+        ].filter(Boolean).join(" · ");
+        toast.success("Conexão OK", { description: detalhes });
+      } else {
+        toast.error("Falha na conexão", { description: data?.error || "Erro desconhecido" });
+      }
+    } catch (err: any) {
+      toast.dismiss(tid);
+      toast.error("Erro ao testar", { description: err.message });
+    } finally {
+      setTestando(false);
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -203,9 +242,15 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
               </div>
             </div>
 
-            <p className="text-xs text-muted-foreground">
-              A senha é armazenada criptografada e só é descriptografada no servidor durante a sincronização.
-            </p>
+            <div className="flex items-center justify-between gap-2 pt-2 border-t">
+              <p className="text-xs text-muted-foreground flex-1">
+                A senha é armazenada criptografada e só é descriptografada no servidor durante a sincronização.
+              </p>
+              <Button type="button" variant="secondary" size="sm" onClick={handleTestar} disabled={testando}>
+                {testando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlugZap className="h-4 w-4 mr-2" />}
+                Testar Conexão
+              </Button>
+            </div>
           </TabsContent>
         </Tabs>
 
