@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eye, EyeOff, Loader2, PlugZap } from "lucide-react";
+import { Eye, EyeOff, Loader2, PlugZap, Copy } from "lucide-react";
 import { toast } from "sonner";
+
+const PUSH_BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/controlid-push`;
 
 interface Props {
   open: boolean;
@@ -39,9 +41,14 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
   const [usuario, setUsuario] = useState("admin");
   const [senha, setSenha] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [deviceIdExterno, setDeviceIdExterno] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [testando, setTestando] = useState(false);
+
+  const pushUrl = `${PUSH_BASE_URL}?deviceId=${deviceIdExterno || "<DEVICE_ID>"}&action=push`;
+  const resultUrl = `${PUSH_BASE_URL}?deviceId=${deviceIdExterno || "<DEVICE_ID>"}&action=result`;
+  const copy = (txt: string) => { navigator.clipboard.writeText(txt); toast.success("Copiado"); };
 
   const handleTestar = async () => {
     if (!host.trim()) {
@@ -95,6 +102,7 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
       setUsuario(equipamento?.usuario || "admin");
       setSenha("");
       setMostrarSenha(false);
+      setDeviceIdExterno(equipamento?.device_id_externo || "");
     }
   }, [open, equipamento]);
 
@@ -124,6 +132,14 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
         p_senha: senha || null,
       });
       if (error) throw error;
+      // Persiste device_id_externo separadamente (não está na RPC)
+      const equipId = (data as string) || equipamento?.id;
+      if (equipId) {
+        await supabase
+          .from("equipamentos_ponto")
+          .update({ device_id_externo: deviceIdExterno.trim() || null })
+          .eq("id", equipId);
+      }
       toast.success(equipamento?.id ? "Equipamento atualizado" : "Equipamento cadastrado");
       onSaved();
       onOpenChange(false);
@@ -142,9 +158,10 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
         </DialogHeader>
 
         <Tabs defaultValue="geral" className="w-full">
-          <TabsList className="grid grid-cols-2 w-full">
+          <TabsList className="grid grid-cols-3 w-full">
             <TabsTrigger value="geral">Informações Gerais</TabsTrigger>
-            <TabsTrigger value="conexao">Conexão</TabsTrigger>
+            <TabsTrigger value="conexao">Conexão Direta</TabsTrigger>
+            <TabsTrigger value="push">Modo Push</TabsTrigger>
           </TabsList>
 
           <TabsContent value="geral" className="space-y-4 pt-4">
@@ -251,6 +268,59 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
                 {testando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlugZap className="h-4 w-4 mr-2" />}
                 Testar Conexão
               </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="push" className="space-y-4 pt-4">
+            <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+              <strong className="text-foreground">Modo recomendado para relógios em rede interna.</strong>{" "}
+              O próprio equipamento envia requisições HTTP para o servidor — não precisa de IP público,
+              VPN ou iDCloud pago. Configure a URL abaixo no painel do REP em{" "}
+              <em>Configurações → Servidor Push</em>.
+            </div>
+
+            <div className="space-y-2">
+              <Label>Device ID *</Label>
+              <Input
+                value={deviceIdExterno}
+                onChange={(e) => setDeviceIdExterno(e.target.value)}
+                placeholder="ID que o equipamento envia (ex: 1, 100, ou nº de série)"
+              />
+              <p className="text-xs text-muted-foreground">
+                É o valor de <code>deviceId</code> que aparece nas requisições enviadas pelo relógio.
+                Geralmente é o ID configurado no REP ou seu número de série.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>URL Push (configure no REP)</Label>
+              <div className="flex gap-2">
+                <Input value={pushUrl} readOnly className="font-mono text-xs" />
+                <Button type="button" variant="secondary" size="icon" onClick={() => copy(pushUrl)}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>URL Result (configure no REP)</Label>
+              <div className="flex gap-2">
+                <Input value={resultUrl} readOnly className="font-mono text-xs" />
+                <Button type="button" variant="secondary" size="icon" onClick={() => copy(resultUrl)}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-dashed p-3 text-xs space-y-1">
+              <p className="font-medium">Como configurar no REP iDClass-C:</p>
+              <ol className="list-decimal pl-4 space-y-0.5 text-muted-foreground">
+                <li>Acesse o painel admin do relógio (geralmente http://IP-DO-REP)</li>
+                <li>Vá em <strong>Configurações → Modo Push / Servidor</strong></li>
+                <li>Cole a URL Push acima no campo "URL do servidor"</li>
+                <li>Defina o intervalo (ex: 60 segundos)</li>
+                <li>Salve e reinicie o equipamento</li>
+              </ol>
             </div>
           </TabsContent>
         </Tabs>
