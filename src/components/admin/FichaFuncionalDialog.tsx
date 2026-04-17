@@ -430,7 +430,7 @@ export function FichaFuncionalDialog({ funcionario, open, onClose }: FichaFuncio
           {/* Extra fields from dados that aren't in any definition (hide Google Drive URLs — replaced by Documentos) */}
           {(() => {
             const filteredExtraKeys = extraKeys.filter(key => {
-              const v = (dados as any)?.[key];
+              const v = formData[key];
               return !(typeof v === "string" && v.includes("drive.google.com"));
             });
             if (filteredExtraKeys.length === 0) return null;
