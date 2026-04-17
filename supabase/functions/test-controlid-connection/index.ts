@@ -7,9 +7,16 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-function isPrivateHost(host: string): boolean {
+function normalizeHost(host: string): string {
   const h = host.replace(/\s/g, "");
-  // IPs privados RFC1918 + loopback + link-local (aceita zeros à esquerda como 192.168.000.023)
+  // Remove zeros à esquerda em octetos IPv4 (192.168.000.023 -> 192.168.0.23)
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) return [m[1], m[2], m[3], m[4]].map((o) => String(Number(o))).join(".");
+  return h;
+}
+
+function isPrivateHost(host: string): boolean {
+  const h = normalizeHost(host);
   const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (m) {
     const [a, b] = [Number(m[1]), Number(m[2])];
