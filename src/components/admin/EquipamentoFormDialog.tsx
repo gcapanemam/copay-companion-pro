@@ -41,9 +41,14 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
   const [usuario, setUsuario] = useState("admin");
   const [senha, setSenha] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [deviceIdExterno, setDeviceIdExterno] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [testando, setTestando] = useState(false);
+
+  const pushUrl = `${PUSH_BASE_URL}?deviceId=${deviceIdExterno || "<DEVICE_ID>"}&action=push`;
+  const resultUrl = `${PUSH_BASE_URL}?deviceId=${deviceIdExterno || "<DEVICE_ID>"}&action=result`;
+  const copy = (txt: string) => { navigator.clipboard.writeText(txt); toast.success("Copiado"); };
 
   const handleTestar = async () => {
     if (!host.trim()) {
