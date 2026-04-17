@@ -41,6 +41,45 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  const [testando, setTestando] = useState(false);
+
+  const handleTestar = async () => {
+    if (!host.trim()) {
+      toast.error("Informe Host/IP antes de testar");
+      return;
+    }
+    const portaNum = porta ? Number(porta) : null;
+    setTestando(true);
+    const tid = toast.loading("Testando conexão...");
+    try {
+      const { data, error } = await supabase.functions.invoke("test-controlid-connection", {
+        body: {
+          equipamento_id: equipamento?.id ?? null,
+          host: host.trim(),
+          porta: portaNum,
+          usuario: usuario.trim() || null,
+          senha: senha || null,
+          tipo_conexao: tipoConexao,
+        },
+      });
+      if (error) throw error;
+      toast.dismiss(tid);
+      if (data?.ok) {
+        const detalhes = [
+          `${data.latencia_ms}ms`,
+          data.registros_afd != null ? `${data.registros_afd} marcações no AFD` : null,
+        ].filter(Boolean).join(" · ");
+        toast.success("Conexão OK", { description: detalhes });
+      } else {
+        toast.error("Falha na conexão", { description: data?.error || "Erro desconhecido" });
+      }
+    } catch (err: any) {
+      toast.dismiss(tid);
+      toast.error("Erro ao testar", { description: err.message });
+    } finally {
+      setTestando(false);
+    }
+  };
 
   useEffect(() => {
     if (open) {
