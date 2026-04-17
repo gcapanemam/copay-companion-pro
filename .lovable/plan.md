@@ -1,51 +1,41 @@
 
+## Atualização em massa de funcionários a partir do XLS
 
-## Plano: Tornar credenciais de conexão configuráveis por equipamento
+**Objetivo:** A partir do arquivo `Empregados_em_Excel_-_Apenas_Ativos.xls`:
+1. Para cada funcionário **encontrado no arquivo**: atualizar `unidade` (coluna 1) e `primeiro_dia_trabalho` (coluna 3) na tabela `admissoes`.
+2. Para cada funcionário **que NÃO aparece no arquivo**: marcar como inativo, preenchendo `data_demissao` com a data de hoje (2026-04-17), se ainda estiver vazio.
 
-### Contexto
-Hoje, o sistema usa secrets globais (`IDCLOUD_MYSQL_*`) para conectar ao iDCloud. Mas como mostra a imagem do iDSecure, **cada relógio tem suas próprias informações de conexão** (Host/IP, Porta, Usuário, Senha). Vou tornar isso configurável por equipamento.
+**Hoje no banco:** 620 funcionários em `admissoes`. Praticamente nenhum tem `unidade` ou `primeiro_dia_trabalho` preenchidos. O arquivo da folha será a fonte da verdade.
 
-### Mudanças
+### Como vou casar funcionários (chave de identificação)
 
-**1. Migração de banco — adicionar colunas em `equipamentos_ponto`**
-- `host` TEXT (ex: `192.168.0.23` ou host do iDCloud)
-- `porta` INTEGER (ex: 443 ou 3306)
-- `usuario` TEXT (ex: `admin`)
-- `senha` TEXT (criptografada com pgcrypto via `pgp_sym_encrypt`)
-- `tipo_conexao` TEXT — enum textual: `idcloud_mysql` (banco do iDCloud) ou `rep_local` (REST API do relógio na rede local)
-- `versao_firmware` TEXT (campo informativo, ex: `0418`)
+A planilha provavelmente traz nome (e talvez matrícula/CPF). Vou usar esta ordem de prioridade para casar com `admissoes`:
+1. **CPF** (somente dígitos) — se existir na planilha. Mais confiável.
+2. **Matrícula** — se existir.
+3. **Nome normalizado** (uppercase, sem acentos, espaços colapsados) — fallback.
 
-A senha será armazenada criptografada usando uma chave master em secret (`EQUIPAMENTO_ENCRYPTION_KEY`). A edge function descriptografa no momento da sincronização.
+Se uma linha do XLS não casar com ninguém, fica num relatório de "não encontrados" para você revisar (não cria funcionário novo automaticamente).
 
-**2. Formulário `EquipamentoFormDialog.tsx` — adicionar campos**
-Layout em duas colunas seguindo o padrão da imagem do iDSecure:
-- **Aba/seção "Informações Gerais"**: Nome, Modelo (select com REP iDClass, REP iDFace, etc.), Número de Série, Descrição, Ativo
-- **Aba/seção "Conexão"**: Tipo de Conexão (radio: iDCloud MySQL / REP Local), Host/IP, Porta, Usuário, Senha (input password com toggle mostrar/ocultar)
-- Versão do firmware e última comunicação aparecem em modo read-only (vindos do banco)
+### Etapas da implementação
 
-**3. Edge function `sync-controlid` — refatorar**
-- Em vez de ler secrets globais, lê `host/porta/usuario/senha` do registro do equipamento
-- Descriptografa a senha
-- Suporta dois modos:
-  - `idcloud_mysql`: conexão MySQL (comportamento atual)
-  - `rep_local`: chamada REST ao relógio (`POST /session_login.fcgi` + `POST /get_afd.fcgi`) — usado quando o relógio está acessível na rede local/VPN
-- Mantém credenciais por equipamento, permitindo múltiplos relógios independentes
+1. **Inspecionar o XLS** (via script Python com xlrd) para confirmar as colunas reais — no mínimo identificar: Unidade, Nome, Data de Admissão, e qualquer chave (CPF/matrícula).
+2. **Mostrar a você** uma prévia: quantas linhas no arquivo, quantas casaram por CPF/nome, quantas serão inativadas. **Aguardar OK antes de gravar.**
+3. **Aplicar updates em lote** via insert tool (UPDATE):
+   - `UPDATE admissoes SET unidade=?, primeiro_dia_trabalho=? WHERE id=?` para cada match.
+   - `UPDATE admissoes SET data_demissao='2026-04-17' WHERE id IN (...) AND data_demissao IS NULL` para os ausentes.
+4. **Relatórios finais** salvos em `/mnt/documents/`:
+   - `atualizados.csv` — quem foi atualizado (com unidade/admissão).
+   - `inativados.csv` — quem foi marcado como demitido hoje.
+   - `nao_encontrados.csv` — linhas do XLS sem correspondência (para você decidir).
 
-**4. Secret necessário (apenas 1)**
-- `EQUIPAMENTO_ENCRYPTION_KEY` — chave para criptografar/descriptografar senhas no banco
+### Pontos a confirmar antes de gravar
 
-Os 5 secrets antigos (`IDCLOUD_MYSQL_*`) deixam de ser usados.
+- **Formato da data**: hoje o campo `primeiro_dia_trabalho` é `text` e os existentes estão em formato `dd/mm/aaaa`. Vou manter esse formato.
+- **Data de demissão dos inativados**: usarei hoje (2026-04-17). Se preferir outra data (ex.: último dia do mês passado), me avise.
+- **Funcionários já com `data_demissao` preenchida**: deixo como estão (não sobrescrevo).
+- **Sobrescrever unidade/admissão já preenchidos?** Sim, o XLS é a fonte da verdade — vou sobrescrever.
 
-### Detalhes técnicos
-- **Criptografia**: `pgp_sym_encrypt(senha, 'chave')` na inserção via função RPC `salvar_equipamento_com_senha` (para não expor a chave no client). Leitura só na edge function via `pgp_sym_decrypt`.
-- **Migração de senha**: como o usuário ainda não cadastrou nenhum equipamento real, não há dados a migrar.
-- **Validação**: porta entre 1-65535, host obrigatório quando `tipo_conexao` for definido.
-
-### Arquivos
-- `supabase/migrations/` (novas colunas + função RPC para salvar com senha criptografada)
-- `src/components/admin/EquipamentoFormDialog.tsx` (novos campos + RPC ao salvar)
-- `supabase/functions/sync-controlid/index.ts` (refatorar para ler credenciais do banco + suportar REST local)
-
-### Pré-requisito
-Adicionar 1 secret: `EQUIPAMENTO_ENCRYPTION_KEY` (vou pedir após aprovação do plano)
-
+### Ordem de execução no próximo modo
+1. Ler o XLS e mostrar prévia com contagens (sem gravar).
+2. Você aprova.
+3. Executar updates + gerar os 3 CSVs em `/mnt/documents/`.
