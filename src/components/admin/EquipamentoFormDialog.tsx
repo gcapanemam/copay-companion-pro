@@ -71,7 +71,8 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
         ].filter(Boolean).join(" · ");
         toast.success("Conexão OK", { description: detalhes });
       } else {
-        toast.error("Falha na conexão", { description: data?.error || "Erro desconhecido" });
+        const desc = [data?.error, data?.dica].filter(Boolean).join(" — ");
+        toast.error("Falha na conexão", { description: desc || "Erro desconhecido", duration: 10000 });
       }
     } catch (err: any) {
       toast.dismiss(tid);
