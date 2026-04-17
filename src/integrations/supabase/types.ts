@@ -669,37 +669,55 @@ export type Database = {
           ativo: boolean
           created_at: string
           descricao: string | null
+          host: string | null
           id: string
           modelo: string | null
           nome: string
           numero_serie: string | null
+          porta: number | null
+          senha_cripto: string | null
+          tipo_conexao: string
           ultima_sincronizacao: string | null
           ultimo_nsr: number
           updated_at: string
+          usuario: string | null
+          versao_firmware: string | null
         }
         Insert: {
           ativo?: boolean
           created_at?: string
           descricao?: string | null
+          host?: string | null
           id?: string
           modelo?: string | null
           nome: string
           numero_serie?: string | null
+          porta?: number | null
+          senha_cripto?: string | null
+          tipo_conexao?: string
           ultima_sincronizacao?: string | null
           ultimo_nsr?: number
           updated_at?: string
+          usuario?: string | null
+          versao_firmware?: string | null
         }
         Update: {
           ativo?: boolean
           created_at?: string
           descricao?: string | null
+          host?: string | null
           id?: string
           modelo?: string | null
           nome?: string
           numero_serie?: string | null
+          porta?: number | null
+          senha_cripto?: string | null
+          tipo_conexao?: string
           ultima_sincronizacao?: string | null
           ultimo_nsr?: number
           updated_at?: string
+          usuario?: string | null
+          versao_firmware?: string | null
         }
         Relationships: []
       }
