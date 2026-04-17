@@ -102,6 +102,7 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
       setUsuario(equipamento?.usuario || "admin");
       setSenha("");
       setMostrarSenha(false);
+      setDeviceIdExterno(equipamento?.device_id_externo || "");
     }
   }, [open, equipamento]);
 
