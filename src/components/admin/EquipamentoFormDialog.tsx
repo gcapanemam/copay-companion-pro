@@ -270,6 +270,59 @@ export function EquipamentoFormDialog({ open, onOpenChange, equipamento, onSaved
               </Button>
             </div>
           </TabsContent>
+
+          <TabsContent value="push" className="space-y-4 pt-4">
+            <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+              <strong className="text-foreground">Modo recomendado para relógios em rede interna.</strong>{" "}
+              O próprio equipamento envia requisições HTTP para o servidor — não precisa de IP público,
+              VPN ou iDCloud pago. Configure a URL abaixo no painel do REP em{" "}
+              <em>Configurações → Servidor Push</em>.
+            </div>
+
+            <div className="space-y-2">
+              <Label>Device ID *</Label>
+              <Input
+                value={deviceIdExterno}
+                onChange={(e) => setDeviceIdExterno(e.target.value)}
+                placeholder="ID que o equipamento envia (ex: 1, 100, ou nº de série)"
+              />
+              <p className="text-xs text-muted-foreground">
+                É o valor de <code>deviceId</code> que aparece nas requisições enviadas pelo relógio.
+                Geralmente é o ID configurado no REP ou seu número de série.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>URL Push (configure no REP)</Label>
+              <div className="flex gap-2">
+                <Input value={pushUrl} readOnly className="font-mono text-xs" />
+                <Button type="button" variant="secondary" size="icon" onClick={() => copy(pushUrl)}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>URL Result (configure no REP)</Label>
+              <div className="flex gap-2">
+                <Input value={resultUrl} readOnly className="font-mono text-xs" />
+                <Button type="button" variant="secondary" size="icon" onClick={() => copy(resultUrl)}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-dashed p-3 text-xs space-y-1">
+              <p className="font-medium">Como configurar no REP iDClass-C:</p>
+              <ol className="list-decimal pl-4 space-y-0.5 text-muted-foreground">
+                <li>Acesse o painel admin do relógio (geralmente http://IP-DO-REP)</li>
+                <li>Vá em <strong>Configurações → Modo Push / Servidor</strong></li>
+                <li>Cole a URL Push acima no campo "URL do servidor"</li>
+                <li>Defina o intervalo (ex: 60 segundos)</li>
+                <li>Salve e reinicie o equipamento</li>
+              </ol>
+            </div>
+          </TabsContent>
         </Tabs>
 
         <DialogFooter>
