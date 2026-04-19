@@ -333,19 +333,32 @@ export function AdminFuncionarios() {
                   <TableCell>
                     <Badge variant={f.origem === "Ambos" ? "default" : "secondary"}>{f.origem}</Badge>
                   </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      title="Ver como funcionário"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(`/minha-area?admin_cpf=${f.cpf}`, "_blank");
-                      }}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title="Alterar senha"
+                        onClick={() => {
+                          setSenhaDialog({ cpf: f.cpf, nome: f.nome });
+                          setNovaSenha("");
+                        }}
+                      >
+                        <Key className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title="Ver como funcionário"
+                        onClick={() => {
+                          window.open(`/minha-area?admin_cpf=${f.cpf}`, "_blank");
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               );
