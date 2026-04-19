@@ -175,10 +175,7 @@ Deno.serve(async (req) => {
 
     // --- Bulk set CPF as password (funcionários da admissão) ---
     if (action === "set-all-senhas-funcionarios-cpf") {
-      const offset = Number((req as any).__offset ?? 0);
       const limit = 50;
-      const reqBody = await Promise.resolve({ offset: 0, limit });
-      // Re-extract from already-parsed body
       const bodyOffset = typeof valor === "number" ? valor : 0;
       const { data: admissoes } = await supabase.from("admissoes").select("cpf").not("cpf", "is", null);
       const cpfsRaw = (admissoes || [])
