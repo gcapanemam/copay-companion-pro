@@ -99,7 +99,8 @@ export function AdminFuncionarios() {
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   })();
 
-  const unidades = [...new Set(funcionarios.map(f => f.admissao?.unidade || "").filter(Boolean))].sort();
+  const UNIDADES_VALIDAS = ["INSTITUTO", "POEMAS", "VERSOS", "VERSOS INFANTIL", "FUND2", "MEDIO"];
+  const unidades = UNIDADES_VALIDAS;
   const departamentos = [...new Set(funcionarios.map(f => f.dados?.departamento || f.admissao?.departamento || "").filter(Boolean))].sort();
 
   const applyFilters = (list: any[]) => {
