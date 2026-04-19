@@ -175,19 +175,27 @@ Deno.serve(async (req) => {
 
     // --- Bulk set CPF as password (funcionários da admissão) ---
     if (action === "set-all-senhas-funcionarios-cpf") {
+      const offset = Number((req as any).__offset ?? 0);
+      const limit = 50;
+      const reqBody = await Promise.resolve({ offset: 0, limit });
+      // Re-extract from already-parsed body
+      const bodyOffset = typeof valor === "number" ? valor : 0;
       const { data: admissoes } = await supabase.from("admissoes").select("cpf").not("cpf", "is", null);
       const cpfsRaw = (admissoes || [])
         .map((a: any) => String(a.cpf || "").replace(/\D/g, ""))
         .filter((c: string) => c.length === 11);
-      const uniqueCpfs = Array.from(new Set(cpfsRaw));
-      let count = 0;
-      for (const rawCpf of uniqueCpfs) {
+      const uniqueCpfs = Array.from(new Set(cpfsRaw)).sort();
+      const total = uniqueCpfs.length;
+      const slice = uniqueCpfs.slice(bodyOffset, bodyOffset + limit);
+      // Process this batch in parallel
+      const results = await Promise.all(slice.map(async (rawCpf) => {
         const formatted = `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`;
         const hash = await hashPassword(formatted);
         await supabase.from("beneficiario_senhas").upsert({ cpf: rawCpf, senha_hash: hash }, { onConflict: "cpf" });
-        count++;
-      }
-      return jsonResponse({ success: true, count });
+        return rawCpf;
+      }));
+      const nextOffset = bodyOffset + slice.length;
+      return jsonResponse({ success: true, processed: results.length, total, nextOffset, done: nextOffset >= total });
     }
 
     const cleanCpf = (cpf || "").replace(/[^0-9]/g, "");
