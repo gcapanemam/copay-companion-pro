@@ -14,7 +14,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { GerenciarSenhas } from "@/components/GerenciarSenhas";
+
 import { AdminContracheques } from "@/components/admin/AdminContracheques";
 import { AdminEPIs } from "@/components/admin/AdminEPIs";
 import { AdminValeTransporte } from "@/components/admin/AdminValeTransporte";
@@ -223,7 +223,6 @@ const Index = () => {
               <h1 className="text-lg font-semibold text-foreground hidden sm:block">Portal RH - Admin</h1>
             </div>
             <div className="flex items-center gap-2">
-              <GerenciarSenhas />
               <Button
                 variant="ghost" size="sm"
                 onClick={async () => { await supabase.auth.signOut(); window.location.href = "/login"; }}
