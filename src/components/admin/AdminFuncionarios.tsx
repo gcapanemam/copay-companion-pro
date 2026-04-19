@@ -306,7 +306,7 @@ export function AdminFuncionarios() {
                   <TableCell className="font-medium">{f.nome}</TableCell>
                   <TableCell>{formatCpf(f.cpf)}</TableCell>
                   <TableCell>{f.dados?.funcao || f.admissao?.funcao || "-"}</TableCell>
-                  <TableCell>{f.dados?.unidade || f.admissao?.unidade || "-"}</TableCell>
+                  <TableCell>{f.admissao?.unidade || "-"}</TableCell>
                   <TableCell>{f.dados?.departamento || f.admissao?.departamento || "-"}</TableCell>
                   {showDemissao && (
                     <TableCell>
