@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Search, Users, UserX, Eye, Trash2, CloudDownload, ImageIcon } from "lucide-react";
+import { Loader2, Search, Users, UserX, Eye, Trash2, CloudDownload, ImageIcon, Key } from "lucide-react";
 import { FichaFuncionalDialog } from "./FichaFuncionalDialog";
 import { toast } from "sonner";
 import {
@@ -24,6 +24,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 function getInitials(name: string) {
   return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
@@ -43,6 +52,9 @@ export function AdminFuncionarios() {
   const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [senhaDialog, setSenhaDialog] = useState<{ cpf: string; nome: string } | null>(null);
+  const [novaSenha, setNovaSenha] = useState("");
+  const [savingSenha, setSavingSenha] = useState(false);
   const [importStatus, setImportStatus] = useState<{ running: boolean; progress: number; total: number; success: number; errors: number; already: number } | null>(null);
   const [fotoStatus, setFotoStatus] = useState<{ running: boolean; processed: number; success: number; errors: number; skipped: number } | null>(null);
   const importAbortRef = useRef(false);
