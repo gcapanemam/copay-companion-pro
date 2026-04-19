@@ -158,13 +158,30 @@ Deno.serve(async (req) => {
       return jsonResponse({ beneficiarios });
     }
 
-    // --- Bulk set CPF as password ---
+    // --- Bulk set CPF as password (beneficiários do plano) ---
     if (action === "set-all-senhas-cpf") {
       const { data: titulares } = await supabase.from("titulares").select("cpf").not("cpf", "is", null);
       const { data: dependentes } = await supabase.from("dependentes").select("cpf").not("cpf", "is", null);
       const allCpfs = [...(titulares || []).map((t: any) => t.cpf), ...(dependentes || []).map((d: any) => d.cpf)].filter((c: string) => c && c.length === 11);
       let count = 0;
       for (const rawCpf of allCpfs) {
+        const formatted = `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`;
+        const hash = await hashPassword(formatted);
+        await supabase.from("beneficiario_senhas").upsert({ cpf: rawCpf, senha_hash: hash }, { onConflict: "cpf" });
+        count++;
+      }
+      return jsonResponse({ success: true, count });
+    }
+
+    // --- Bulk set CPF as password (funcionários da admissão) ---
+    if (action === "set-all-senhas-funcionarios-cpf") {
+      const { data: admissoes } = await supabase.from("admissoes").select("cpf").not("cpf", "is", null);
+      const cpfsRaw = (admissoes || [])
+        .map((a: any) => String(a.cpf || "").replace(/\D/g, ""))
+        .filter((c: string) => c.length === 11);
+      const uniqueCpfs = Array.from(new Set(cpfsRaw));
+      let count = 0;
+      for (const rawCpf of uniqueCpfs) {
         const formatted = `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`;
         const hash = await hashPassword(formatted);
         await supabase.from("beneficiario_senhas").upsert({ cpf: rawCpf, senha_hash: hash }, { onConflict: "cpf" });
