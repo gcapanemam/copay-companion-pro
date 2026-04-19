@@ -527,6 +527,38 @@ export function AdminFuncionarios() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!senhaDialog} onOpenChange={(o) => { if (!o) { setSenhaDialog(null); setNovaSenha(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Alterar senha</DialogTitle>
+            <DialogDescription>
+              Definir nova senha para <strong>{senhaDialog?.nome}</strong> (CPF: {senhaDialog ? formatCpf(senhaDialog.cpf) : ""}).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="nova-senha">Nova senha</Label>
+            <Input
+              id="nova-senha"
+              type="text"
+              autoComplete="new-password"
+              placeholder="Mínimo 4 caracteres"
+              value={novaSenha}
+              onChange={(e) => setNovaSenha(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSetSenha(); }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setSenhaDialog(null); setNovaSenha(""); }} disabled={savingSenha}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSetSenha} disabled={savingSenha || novaSenha.length < 4}>
+              {savingSenha && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
