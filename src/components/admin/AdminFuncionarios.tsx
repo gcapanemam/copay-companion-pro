@@ -154,6 +154,29 @@ export function AdminFuncionarios() {
     });
   };
 
+  const handleSetSenha = async () => {
+    if (!senhaDialog) return;
+    if (!novaSenha || novaSenha.length < 4) {
+      toast.error("Senha deve ter pelo menos 4 caracteres");
+      return;
+    }
+    setSavingSenha(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("login-beneficiario", {
+        body: { action: "set-senha", cpf: senhaDialog.cpf, senha: novaSenha },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Senha alterada para ${senhaDialog.nome}`);
+      setSenhaDialog(null);
+      setNovaSenha("");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao alterar senha");
+    } finally {
+      setSavingSenha(false);
+    }
+  };
+
   const handleDelete = async () => {
     setDeleting(true);
     try {
