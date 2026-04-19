@@ -105,8 +105,11 @@ export function AdminFuncionarios() {
 
   const applyFilters = (list: any[]) => {
     return list.filter((f) => {
-      const term = busca.toLowerCase();
-      const matchNome = f.nome.toLowerCase().includes(term) || f.cpf.includes(busca.replace(/\D/g, ""));
+      const term = busca.trim().toLowerCase();
+      const cpfTerm = busca.replace(/\D/g, "");
+      const matchNome = !term
+        ? true
+        : f.nome.toLowerCase().includes(term) || (cpfTerm.length > 0 && f.cpf.includes(cpfTerm));
       const uni = f.admissao?.unidade || "";
       const dep = f.dados?.departamento || f.admissao?.departamento || "";
       const matchUnidade = filtroUnidade === "__all__" || uni === filtroUnidade;
