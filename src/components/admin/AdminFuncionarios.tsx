@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Search, Users, UserX, Eye, Trash2, CloudDownload, ImageIcon } from "lucide-react";
+import { Loader2, Search, Users, UserX, Eye, Trash2, CloudDownload, ImageIcon, Key } from "lucide-react";
 import { FichaFuncionalDialog } from "./FichaFuncionalDialog";
 import { toast } from "sonner";
 import {
@@ -24,6 +24,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 function getInitials(name: string) {
   return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
@@ -43,6 +52,9 @@ export function AdminFuncionarios() {
   const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [senhaDialog, setSenhaDialog] = useState<{ cpf: string; nome: string } | null>(null);
+  const [novaSenha, setNovaSenha] = useState("");
+  const [savingSenha, setSavingSenha] = useState(false);
   const [importStatus, setImportStatus] = useState<{ running: boolean; progress: number; total: number; success: number; errors: number; already: number } | null>(null);
   const [fotoStatus, setFotoStatus] = useState<{ running: boolean; processed: number; success: number; errors: number; skipped: number } | null>(null);
   const importAbortRef = useRef(false);
@@ -140,6 +152,29 @@ export function AdminFuncionarios() {
       else next.add(cpf);
       return next;
     });
+  };
+
+  const handleSetSenha = async () => {
+    if (!senhaDialog) return;
+    if (!novaSenha || novaSenha.length < 4) {
+      toast.error("Senha deve ter pelo menos 4 caracteres");
+      return;
+    }
+    setSavingSenha(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("login-beneficiario", {
+        body: { action: "set-senha", cpf: senhaDialog.cpf, senha: novaSenha },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Senha alterada para ${senhaDialog.nome}`);
+      setSenhaDialog(null);
+      setNovaSenha("");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao alterar senha");
+    } finally {
+      setSavingSenha(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -321,19 +356,32 @@ export function AdminFuncionarios() {
                   <TableCell>
                     <Badge variant={f.origem === "Ambos" ? "default" : "secondary"}>{f.origem}</Badge>
                   </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      title="Ver como funcionário"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(`/minha-area?admin_cpf=${f.cpf}`, "_blank");
-                      }}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title="Alterar senha"
+                        onClick={() => {
+                          setSenhaDialog({ cpf: f.cpf, nome: f.nome });
+                          setNovaSenha("");
+                        }}
+                      >
+                        <Key className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title="Ver como funcionário"
+                        onClick={() => {
+                          window.open(`/minha-area?admin_cpf=${f.cpf}`, "_blank");
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               );
@@ -479,6 +527,38 @@ export function AdminFuncionarios() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!senhaDialog} onOpenChange={(o) => { if (!o) { setSenhaDialog(null); setNovaSenha(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Alterar senha</DialogTitle>
+            <DialogDescription>
+              Definir nova senha para <strong>{senhaDialog?.nome}</strong> (CPF: {senhaDialog ? formatCpf(senhaDialog.cpf) : ""}).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="nova-senha">Nova senha</Label>
+            <Input
+              id="nova-senha"
+              type="text"
+              autoComplete="new-password"
+              placeholder="Mínimo 4 caracteres"
+              value={novaSenha}
+              onChange={(e) => setNovaSenha(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSetSenha(); }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setSenhaDialog(null); setNovaSenha(""); }} disabled={savingSenha}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSetSenha} disabled={savingSenha || novaSenha.length < 4}>
+              {savingSenha && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
