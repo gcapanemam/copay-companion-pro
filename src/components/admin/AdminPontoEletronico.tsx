@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Plus, RefreshCw, Pencil, Wifi, WifiOff, Clock, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EquipamentoPontoDialog } from "./EquipamentoPontoDialog";
+import { AdminJornadas } from "./AdminJornadas";
 
 type Equipamento = Database["public"]["Tables"]["equipamentos_ponto"]["Row"];
 type RegistroPonto = Database["public"]["Tables"]["registros_ponto"]["Row"];
