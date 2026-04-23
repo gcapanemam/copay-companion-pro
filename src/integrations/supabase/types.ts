@@ -197,6 +197,50 @@ export type Database = {
         }
         Relationships: []
       }
+      banco_horas_movimentos: {
+        Row: {
+          cpf: string
+          created_at: string
+          data_referencia: string
+          descricao: string | null
+          expira_em: string | null
+          id: string
+          minutos: number
+          origem: string
+          registro_ponto_id: string | null
+        }
+        Insert: {
+          cpf: string
+          created_at?: string
+          data_referencia: string
+          descricao?: string | null
+          expira_em?: string | null
+          id?: string
+          minutos: number
+          origem?: string
+          registro_ponto_id?: string | null
+        }
+        Update: {
+          cpf?: string
+          created_at?: string
+          data_referencia?: string
+          descricao?: string | null
+          expira_em?: string | null
+          id?: string
+          minutos?: number
+          origem?: string
+          registro_ponto_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "banco_horas_movimentos_registro_ponto_id_fkey"
+            columns: ["registro_ponto_id"]
+            isOneToOne: false
+            referencedRelation: "registros_ponto"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       beneficiario_senhas: {
         Row: {
           cpf: string
@@ -453,6 +497,39 @@ export type Database = {
           tipo_destinatario?: string
           titulo?: string
           valor_destinatario?: string | null
+        }
+        Relationships: []
+      }
+      config_horas_extras: {
+        Row: {
+          adicional_100_pct: number
+          adicional_50_pct: number
+          created_at: string
+          expiracao_banco_meses: number
+          id: string
+          permite_banco_horas: boolean
+          tolerancia_min: number
+          updated_at: string
+        }
+        Insert: {
+          adicional_100_pct?: number
+          adicional_50_pct?: number
+          created_at?: string
+          expiracao_banco_meses?: number
+          id?: string
+          permite_banco_horas?: boolean
+          tolerancia_min?: number
+          updated_at?: string
+        }
+        Update: {
+          adicional_100_pct?: number
+          adicional_50_pct?: number
+          created_at?: string
+          expiracao_banco_meses?: number
+          id?: string
+          permite_banco_horas?: boolean
+          tolerancia_min?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -896,6 +973,89 @@ export type Database = {
         }
         Relationships: []
       }
+      funcionario_jornada: {
+        Row: {
+          cpf: string
+          created_at: string
+          id: string
+          jornada_id: string
+          vigencia_fim: string | null
+          vigencia_inicio: string
+        }
+        Insert: {
+          cpf: string
+          created_at?: string
+          id?: string
+          jornada_id: string
+          vigencia_fim?: string | null
+          vigencia_inicio: string
+        }
+        Update: {
+          cpf?: string
+          created_at?: string
+          id?: string
+          jornada_id?: string
+          vigencia_fim?: string | null
+          vigencia_inicio?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funcionario_jornada_jornada_id_fkey"
+            columns: ["jornada_id"]
+            isOneToOne: false
+            referencedRelation: "jornadas_trabalho"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jornadas_trabalho: {
+        Row: {
+          ativo: boolean
+          carga_diaria_min: number
+          carga_semanal_min: number
+          created_at: string
+          dias_semana: Json
+          entrada_padrao: string | null
+          id: string
+          intervalo_obrigatorio_min: number
+          nome: string
+          saida_padrao: string | null
+          tipo: string
+          tolerancia_min: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          carga_diaria_min?: number
+          carga_semanal_min?: number
+          created_at?: string
+          dias_semana?: Json
+          entrada_padrao?: string | null
+          id?: string
+          intervalo_obrigatorio_min?: number
+          nome: string
+          saida_padrao?: string | null
+          tipo?: string
+          tolerancia_min?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          carga_diaria_min?: number
+          carga_semanal_min?: number
+          created_at?: string
+          dias_semana?: Json
+          entrada_padrao?: string | null
+          id?: string
+          intervalo_obrigatorio_min?: number
+          nome?: string
+          saida_padrao?: string | null
+          tipo?: string
+          tolerancia_min?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mensalidades: {
         Row: {
           ano: number
@@ -948,14 +1108,18 @@ export type Database = {
           data: string
           data_hora: string | null
           duracao: string | null
+          endereco_aproximado: string | null
           entrada_1: string | null
           entrada_2: string | null
           entrada_3: string | null
           equipamento_id: string | null
           id: string
+          latitude: number | null
+          longitude: number | null
           motivo: string | null
           nsr: number | null
           ocorrencia: string | null
+          precisao_metros: number | null
           saida_1: string | null
           saida_2: string | null
           saida_3: string | null
@@ -967,14 +1131,18 @@ export type Database = {
           data: string
           data_hora?: string | null
           duracao?: string | null
+          endereco_aproximado?: string | null
           entrada_1?: string | null
           entrada_2?: string | null
           entrada_3?: string | null
           equipamento_id?: string | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           motivo?: string | null
           nsr?: number | null
           ocorrencia?: string | null
+          precisao_metros?: number | null
           saida_1?: string | null
           saida_2?: string | null
           saida_3?: string | null
@@ -986,14 +1154,18 @@ export type Database = {
           data?: string
           data_hora?: string | null
           duracao?: string | null
+          endereco_aproximado?: string | null
           entrada_1?: string | null
           entrada_2?: string | null
           entrada_3?: string | null
           equipamento_id?: string | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           motivo?: string | null
           nsr?: number | null
           ocorrencia?: string | null
+          precisao_metros?: number | null
           saida_1?: string | null
           saida_2?: string | null
           saida_3?: string | null
@@ -1009,6 +1181,48 @@ export type Database = {
           },
         ]
       }
+      registros_ponto_auditoria: {
+        Row: {
+          alterado_por: string | null
+          campo: string
+          cpf: string
+          created_at: string
+          data: string
+          id: string
+          motivo: string | null
+          registro_id: string | null
+          solicitacao_id: string | null
+          valor_anterior: string | null
+          valor_novo: string | null
+        }
+        Insert: {
+          alterado_por?: string | null
+          campo: string
+          cpf: string
+          created_at?: string
+          data: string
+          id?: string
+          motivo?: string | null
+          registro_id?: string | null
+          solicitacao_id?: string | null
+          valor_anterior?: string | null
+          valor_novo?: string | null
+        }
+        Update: {
+          alterado_por?: string | null
+          campo?: string
+          cpf?: string
+          created_at?: string
+          data?: string
+          id?: string
+          motivo?: string | null
+          registro_id?: string | null
+          solicitacao_id?: string | null
+          valor_anterior?: string | null
+          valor_novo?: string | null
+        }
+        Relationships: []
+      }
       solicitacoes_ponto: {
         Row: {
           aprovado_em: string | null
@@ -1017,6 +1231,7 @@ export type Database = {
           cpf: string
           created_at: string
           data: string
+          data_fim: string | null
           id: string
           motivo: string
           observacao_admin: string | null
@@ -1033,6 +1248,7 @@ export type Database = {
           cpf: string
           created_at?: string
           data: string
+          data_fim?: string | null
           id?: string
           motivo: string
           observacao_admin?: string | null
@@ -1049,6 +1265,7 @@ export type Database = {
           cpf?: string
           created_at?: string
           data?: string
+          data_fim?: string | null
           id?: string
           motivo?: string
           observacao_admin?: string | null

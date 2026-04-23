@@ -339,6 +339,6 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Ação inválida" }, 400);
   } catch (error) {
     console.error("Error:", error);
-    return jsonResponse({ error: error.message }, 500);
+    return jsonResponse({ error: error instanceof Error ? error.message : String(error) }, 500);
   }
 });

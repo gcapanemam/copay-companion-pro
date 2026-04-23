@@ -29,6 +29,7 @@ import {
   SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton,
   SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
+import { calcularJornadaDia, calcularBancoHoras, JORNADA_PADRAO, minutosParaHHMM, corStatus, labelStatus, type JornadaLike, type CalculoDia } from "@/lib/pontoCalculos";
 
 const BadgeCount = ({ count }: { count: number }) => {
   if (count <= 0) return null;
@@ -408,6 +409,87 @@ function PortalPonto({ cpf }: { cpf: string }) {
     return m;
   }, [solicitacoesPendentes]);
 
+  // ---- Jornada vinculada ao funcionário (com fallback para padrão 8h) ----
+  const { data: jornada = JORNADA_PADRAO } = useQuery<JornadaLike>({
+    queryKey: ["portal-ponto-jornada", cpfNorm],
+    queryFn: async () => {
+      if (!cpfNorm) return JORNADA_PADRAO;
+      const suffix9 = cpfNorm.slice(-9);
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: vinc } = await supabase
+        .from("funcionario_jornada")
+        .select("jornada_id, vigencia_inicio, vigencia_fim")
+        .like("cpf", `%${suffix9}`)
+        .lte("vigencia_inicio", today)
+        .order("vigencia_inicio", { ascending: false })
+        .limit(1);
+      const v = (vinc || []).find((x) => !x.vigencia_fim || x.vigencia_fim >= today);
+      if (!v) return JORNADA_PADRAO;
+      const { data: j } = await supabase
+        .from("jornadas_trabalho")
+        .select("carga_diaria_min, carga_semanal_min, intervalo_obrigatorio_min, tolerancia_min, dias_semana, entrada_padrao, saida_padrao")
+        .eq("id", v.jornada_id)
+        .maybeSingle();
+      if (!j) return JORNADA_PADRAO;
+      const dias = Array.isArray(j.dias_semana) ? (j.dias_semana as number[]) : JORNADA_PADRAO.dias_semana;
+      return {
+        carga_diaria_min: j.carga_diaria_min,
+        carga_semanal_min: j.carga_semanal_min,
+        intervalo_obrigatorio_min: j.intervalo_obrigatorio_min,
+        tolerancia_min: j.tolerancia_min,
+        dias_semana: dias,
+        entrada_padrao: j.entrada_padrao,
+        saida_padrao: j.saida_padrao,
+      };
+    },
+    enabled: Boolean(cpfNorm),
+  });
+
+  // ---- Banco de horas: busca movimentos do CPF ----
+  const { data: bancoMovimentos = [] } = useQuery({
+    queryKey: ["portal-ponto-banco", cpfNorm],
+    queryFn: async () => {
+      if (!cpfNorm) return [];
+      const suffix9 = cpfNorm.slice(-9);
+      const { data } = await supabase
+        .from("banco_horas_movimentos")
+        .select("minutos, data_referencia, expira_em, origem, descricao, created_at")
+        .like("cpf", `%${suffix9}`)
+        .order("created_at", { ascending: false })
+        .limit(60);
+      return data || [];
+    },
+    enabled: Boolean(cpfNorm),
+  });
+
+  const saldoBanco = useMemo(() => calcularBancoHoras(bancoMovimentos), [bancoMovimentos]);
+
+  // ---- Cálculo agregado do período (para dashboard cards) ----
+  const calculosByDia = useMemo(() => {
+    const m = new Map<string, CalculoDia>();
+    for (const r of registros || []) {
+      const dia = String(r.data || "").slice(0, 10);
+      if (!dia) continue;
+      m.set(dia, calcularJornadaDia(r, jornada));
+    }
+    return m;
+  }, [registros, jornada]);
+
+  const totaisPeriodo = useMemo(() => {
+    let trabalhadas = 0;
+    let esperadas = 0;
+    let extras = 0;
+    let irregularidades = 0;
+    for (const c of calculosByDia.values()) {
+      trabalhadas += c.trabalhadas_min;
+      esperadas += c.esperadas_min;
+      extras += c.extras_min;
+      if (c.status === "irregular") irregularidades += 1;
+    }
+    return { trabalhadas, esperadas, extras, irregularidades };
+  }, [calculosByDia]);
+
+
   const saveManual = async () => {
     const dia = String(manualDia || "").slice(0, 10);
     const motivo = String(manualMotivo || "").trim();
@@ -751,6 +833,38 @@ function PortalPonto({ cpf }: { cpf: string }) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Dashboard cards */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-xs text-muted-foreground">Trabalhadas no período</div>
+              <div className="mt-1 text-xl font-semibold">{minutosParaHHMM(totaisPeriodo.trabalhadas)}</div>
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-xs text-muted-foreground">Esperadas no período</div>
+              <div className="mt-1 text-xl font-semibold">{minutosParaHHMM(totaisPeriodo.esperadas)}</div>
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-xs text-muted-foreground">Banco de horas</div>
+              <div className={`mt-1 text-xl font-semibold ${saldoBanco.saldo_min < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
+                {minutosParaHHMM(saldoBanco.saldo_min)}
+              </div>
+              {saldoBanco.prestes_a_expirar_min > 0 ? (
+                <div className="text-[10px] text-amber-600 dark:text-amber-400">
+                  {minutosParaHHMM(saldoBanco.prestes_a_expirar_min)} expira em ≤30d
+                </div>
+              ) : null}
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-xs text-muted-foreground">Pendências</div>
+              <div className="mt-1 text-xl font-semibold flex items-center gap-2">
+                {solicitacoesPendentes.length}
+                {totaisPeriodo.irregularidades > 0 ? (
+                  <Badge variant="destructive" className="text-[10px]">{totaisPeriodo.irregularidades} irreg.</Badge>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
             <Input type="date" value={de} onChange={(e) => setDe(e.target.value)} />
             <Input type="date" value={ate} onChange={(e) => setAte(e.target.value)} />
@@ -787,7 +901,10 @@ function PortalPonto({ cpf }: { cpf: string }) {
                     <TableHead>Saí. 2</TableHead>
                     <TableHead>Ent. 3</TableHead>
                     <TableHead>Saí. 3</TableHead>
-                    <TableHead>Total</TableHead>
+                    <TableHead>Trab.</TableHead>
+                    <TableHead>Espe.</TableHead>
+                    <TableHead>Saldo</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>NSR</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
@@ -802,6 +919,7 @@ function PortalPonto({ cpf }: { cpf: string }) {
                         Boolean(r.entrada_2) !== Boolean(r.saida_2) ||
                         Boolean(r.entrada_3) !== Boolean(r.saida_3));
                     const total = r ? sumWorkedMinutes(r) : null;
+                    const calc = r ? calculosByDia.get(dia) : null;
                     return (
                       <TableRow key={dia} className={pairMissing ? "bg-destructive/5" : undefined}>
                         <TableCell className="whitespace-nowrap">
@@ -832,7 +950,18 @@ function PortalPonto({ cpf }: { cpf: string }) {
                         <TableCell className={r && r.saida_3 && !r.entrada_3 ? "text-destructive font-medium" : undefined}>
                           {r ? r.saida_3?.slice(0, 5) || "—" : "—"}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">{r ? formatMinutes(total) : "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap">{r ? minutosParaHHMM(calc?.trabalhadas_min ?? total ?? 0) : "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">{calc ? minutosParaHHMM(calc.esperadas_min) : "—"}</TableCell>
+                        <TableCell className={`whitespace-nowrap font-medium ${calc && calc.saldo_min < 0 ? "text-destructive" : calc && calc.saldo_min > 0 ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
+                          {calc ? minutosParaHHMM(calc.saldo_min) : "—"}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {calc ? (
+                            <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-medium ${corStatus(calc.status)}`}>
+                              {labelStatus(calc.status)}
+                            </span>
+                          ) : "—"}
+                        </TableCell>
                         <TableCell className="whitespace-nowrap">{r?.nsr ?? "—"}</TableCell>
                         <TableCell className="text-right">
                           <Button

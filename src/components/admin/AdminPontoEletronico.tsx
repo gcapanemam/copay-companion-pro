@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Plus, RefreshCw, Pencil, Wifi, WifiOff, Clock, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EquipamentoPontoDialog } from "./EquipamentoPontoDialog";
+import { AdminJornadas } from "./AdminJornadas";
 
 type Equipamento = Database["public"]["Tables"]["equipamentos_ponto"]["Row"];
 type RegistroPonto = Database["public"]["Tables"]["registros_ponto"]["Row"];
@@ -452,7 +453,7 @@ export function AdminPontoEletronico() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Equipamento | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
-  const [tabRegistros, setTabRegistros] = useState<"lista" | "calendario" | "solicitacoes">("lista");
+  const [tabRegistros, setTabRegistros] = useState<"lista" | "calendario" | "solicitacoes" | "jornadas">("lista");
   const [filtroEquipamento, setFiltroEquipamento] = useState<string>("__all__");
   const [busca, setBusca] = useState<string>("");
   const [dataDe, setDataDe] = useState<string>("");
@@ -835,7 +836,7 @@ export function AdminPontoEletronico() {
 
     const baseMotivo = String(s.motivo || "").trim();
     const motivo = best?.motivo ? `${best.motivo}\nAjuste aprovado: ${baseMotivo}` : `Ajuste aprovado: ${baseMotivo}`;
-    const payload = {
+    const payload: Database["public"]["Tables"]["registros_ponto"]["Insert"] = {
       cpf: best?.cpf || cpfNorm,
       data: dia,
       entrada_1: best?.entrada_1 ?? null,
@@ -851,7 +852,7 @@ export function AdminPontoEletronico() {
       ocorrencia: "Ajuste aprovado",
       motivo,
       [campo]: valor,
-    } as unknown as Record<string, unknown>;
+    };
 
     if (best?.id) {
       const { error: updErr } = await supabase.from("registros_ponto").update(payload).eq("id", best.id);
@@ -1338,11 +1339,12 @@ export function AdminPontoEletronico() {
           <CardTitle className="text-lg">Ponto</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs value={tabRegistros} onValueChange={(v) => setTabRegistros(v as "lista" | "calendario" | "solicitacoes")}>
+          <Tabs value={tabRegistros} onValueChange={(v) => setTabRegistros(v as "lista" | "calendario" | "solicitacoes" | "jornadas")}>
             <TabsList>
               <TabsTrigger value="lista">Lista</TabsTrigger>
               <TabsTrigger value="calendario">Calendário</TabsTrigger>
               <TabsTrigger value="solicitacoes">Solicitações de ajuste</TabsTrigger>
+              <TabsTrigger value="jornadas">Jornadas</TabsTrigger>
             </TabsList>
 
             <TabsContent value="lista" className="space-y-4">
@@ -1749,6 +1751,10 @@ export function AdminPontoEletronico() {
                   </Table>
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="jornadas" className="space-y-4">
+              <AdminJornadas />
             </TabsContent>
           </Tabs>
         </CardContent>
