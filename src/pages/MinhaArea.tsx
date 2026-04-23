@@ -833,6 +833,38 @@ function PortalPonto({ cpf }: { cpf: string }) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Dashboard cards */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-xs text-muted-foreground">Trabalhadas no período</div>
+              <div className="mt-1 text-xl font-semibold">{minutosParaHHMM(totaisPeriodo.trabalhadas)}</div>
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-xs text-muted-foreground">Esperadas no período</div>
+              <div className="mt-1 text-xl font-semibold">{minutosParaHHMM(totaisPeriodo.esperadas)}</div>
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-xs text-muted-foreground">Banco de horas</div>
+              <div className={`mt-1 text-xl font-semibold ${saldoBanco.saldo_min < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
+                {minutosParaHHMM(saldoBanco.saldo_min)}
+              </div>
+              {saldoBanco.prestes_a_expirar_min > 0 ? (
+                <div className="text-[10px] text-amber-600 dark:text-amber-400">
+                  {minutosParaHHMM(saldoBanco.prestes_a_expirar_min)} expira em ≤30d
+                </div>
+              ) : null}
+            </div>
+            <div className="rounded-lg border bg-card p-3">
+              <div className="text-xs text-muted-foreground">Pendências</div>
+              <div className="mt-1 text-xl font-semibold flex items-center gap-2">
+                {solicitacoesPendentes.length}
+                {totaisPeriodo.irregularidades > 0 ? (
+                  <Badge variant="destructive" className="text-[10px]">{totaisPeriodo.irregularidades} irreg.</Badge>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
             <Input type="date" value={de} onChange={(e) => setDe(e.target.value)} />
             <Input type="date" value={ate} onChange={(e) => setAte(e.target.value)} />
