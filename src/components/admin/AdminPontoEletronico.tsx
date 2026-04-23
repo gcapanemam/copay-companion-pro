@@ -1432,8 +1432,13 @@ export function AdminPontoEletronico() {
         existingByKey,
       );
 
-      for (let i = 0; i < records.length; i += 200) {
-        const batch = records.slice(i, i + 200);
+      // Importação manual: zera o NSR no payload para evitar colisão no índice único
+      // (nsr, equipamento_id). O NSR original do REP é preservado pelo sync automático;
+      // não vale o risco de duplicar chave aqui já que reusamos NSRs antigos ao mesclar.
+      const payload = records.map((r) => ({ ...r, nsr: null }));
+
+      for (let i = 0; i < payload.length; i += 200) {
+        const batch = payload.slice(i, i + 200);
         const { error } = await supabase
           .from("registros_ponto")
           .upsert(batch, { onConflict: "cpf,data" });
