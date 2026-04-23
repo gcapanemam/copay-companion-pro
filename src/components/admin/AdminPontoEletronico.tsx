@@ -1176,7 +1176,7 @@ export function AdminPontoEletronico() {
       }
     }
 
-    const { records, maiorNsr } = groupMarksIntoDailyRecords(marks, equip.id, existingByKey);
+    const { records, maiorNsr, marcacoesExcedentes } = groupMarksIntoDailyRecords(marks, equip.id, existingByKey);
     if (records.length === 0) {
       const dica = cpfsValidos.size === 0
         ? "Nenhum funcionário encontrado na tabela de admissões."
@@ -1207,6 +1207,7 @@ export function AdminPontoEletronico() {
       maiorNsr,
       cpfResolvido,
       pisResolvido,
+      marcacoesExcedentes,
     };
   };
 
