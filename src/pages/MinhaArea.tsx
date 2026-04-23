@@ -901,7 +901,10 @@ function PortalPonto({ cpf }: { cpf: string }) {
                     <TableHead>Saí. 2</TableHead>
                     <TableHead>Ent. 3</TableHead>
                     <TableHead>Saí. 3</TableHead>
-                    <TableHead>Total</TableHead>
+                    <TableHead>Trab.</TableHead>
+                    <TableHead>Espe.</TableHead>
+                    <TableHead>Saldo</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>NSR</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
