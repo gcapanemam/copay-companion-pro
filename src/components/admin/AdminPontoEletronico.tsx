@@ -994,7 +994,10 @@ export function AdminPontoEletronico() {
     if (!equip.host) throw new Error("Host/URL não configurado");
     const baseUrl = buildBaseUrl(equip.host, equip.porta);
     const usuario = equip.usuario || "admin";
-    const initialNsr = Number(equip.ultimo_nsr || 0) + 1;
+    // Sempre baixar TODAS as marcações do equipamento (sem filtro de NSR).
+    // O sistema deduplica via upsert (cpf,data) + lógica de merge em groupMarksIntoDailyRecords.
+    // Isso garante zero perda de batidas mesmo que o REP envie marcações fora de ordem de NSR.
+    const initialNsr = 1;
 
     const { data: senhaPlana, error: senhaErr } = await supabase.rpc("obter_senha_equipamento", { p_id: equip.id });
     if (senhaErr) throw senhaErr;
