@@ -1470,7 +1470,16 @@ export function AdminPontoEletronico() {
       setImporting(false);
     }
   };
+
+  return (
     <div className="space-y-6">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".txt,text/plain"
+        hidden
+        onChange={(e) => handleAfdFileChosen(e.target.files)}
+      />
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <h2 className="text-xl sm:text-2xl font-bold text-foreground">Ponto Eletrônico</h2>
         <div className="flex gap-2">
