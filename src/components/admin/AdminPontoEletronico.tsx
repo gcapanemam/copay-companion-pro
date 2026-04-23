@@ -371,7 +371,7 @@ function parseAfd(afdText: string): Array<{ nsr: number; dt: Date; date: string;
 
 function groupMarksIntoDailyRecords(
   marks: AfdMark[],
-  equipamentoId: string,
+  equipamentoId: string | null,
   existingByKey: Map<string, RegistroPonto>,
 ): { records: RegistroPontoUpsert[]; maiorNsr: number; marcacoesExcedentes: number } {
   let maiorNsr = 0;
@@ -1428,17 +1428,12 @@ export function AdminPontoEletronico() {
 
       const { records, marcacoesExcedentes } = groupMarksIntoDailyRecords(
         marks,
-        equipIdParaSalvar || "",
+        equipIdParaSalvar,
         existingByKey,
       );
 
-      // Se não vinculado a equipamento, limpa o id no payload
-      const payload = equipIdParaSalvar
-        ? records
-        : records.map((r) => ({ ...r, equipamento_id: null }));
-
-      for (let i = 0; i < payload.length; i += 200) {
-        const batch = payload.slice(i, i + 200);
+      for (let i = 0; i < records.length; i += 200) {
+        const batch = records.slice(i, i + 200);
         const { error } = await supabase
           .from("registros_ponto")
           .upsert(batch, { onConflict: "cpf,data" });
@@ -1461,9 +1456,18 @@ export function AdminPontoEletronico() {
       setImportDialogOpen(false);
       setImportPreview(null);
     } catch (err: unknown) {
+      let desc = "Erro desconhecido";
+      if (err instanceof Error) desc = err.message;
+      else if (err && typeof err === "object") {
+        const e = err as { message?: string; details?: string; hint?: string; code?: string };
+        desc = [e.message, e.details, e.hint, e.code ? `(${e.code})` : ""].filter(Boolean).join(" — ") || JSON.stringify(err);
+      } else {
+        desc = String(err);
+      }
+      console.error("Falha ao importar AFD", err);
       toast({
         title: "Falha ao importar AFD",
-        description: err instanceof Error ? err.message : String(err),
+        description: desc,
         variant: "destructive",
       });
     } finally {
