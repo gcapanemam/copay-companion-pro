@@ -1222,15 +1222,20 @@ export function AdminPontoEletronico() {
       let totalDias = 0;
       let totalMarcacoes = 0;
       let totalNaoMapeadas = 0;
+      let totalExcedentes = 0;
       for (const e of targets) {
         const r = await syncEquipamento(e);
         totalDias += r.diasImportados;
         totalMarcacoes += r.marcacoesLidas;
         totalNaoMapeadas += r.cpfsNaoEncontrados;
+        totalExcedentes += r.marcacoesExcedentes ?? 0;
       }
+      const partes = [`${totalDias} dia(s) importado(s)`, `${totalMarcacoes} marcação(ões)`];
+      if (totalNaoMapeadas) partes.push(`${totalNaoMapeadas} não mapeada(s)`);
+      if (totalExcedentes) partes.push(`${totalExcedentes} excedente(s) (mais de 6 batidas no dia)`);
       toast({
         title: "Sincronização concluída",
-        description: `${totalDias} dia(s) importado(s) • ${totalMarcacoes} marcação(ões)` + (totalNaoMapeadas ? ` • ${totalNaoMapeadas} não mapeada(s)` : ""),
+        description: partes.join(" • "),
       });
       qc.invalidateQueries({ queryKey: ["equipamentos_ponto"] });
       qc.invalidateQueries({ queryKey: ["registros_ponto"] });
