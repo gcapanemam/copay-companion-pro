@@ -365,8 +365,9 @@ function groupMarksIntoDailyRecords(
   marks: AfdMark[],
   equipamentoId: string,
   existingByKey: Map<string, RegistroPonto>,
-): { records: RegistroPontoUpsert[]; maiorNsr: number } {
+): { records: RegistroPontoUpsert[]; maiorNsr: number; marcacoesExcedentes: number } {
   let maiorNsr = 0;
+  let marcacoesExcedentes = 0;
   const byKey = new Map<string, AfdMark[]>();
   for (const m of marks) {
     if (m.nsr > maiorNsr) maiorNsr = m.nsr;
@@ -394,32 +395,33 @@ function groupMarksIntoDailyRecords(
         ].map((t) => (t ? String(t).slice(0, 5) : null))
       : [null, null, null, null, null, null];
 
-    let merged: Array<string | null>;
-    if (existing && existing.tipo_marcacao) {
-      const used = new Set(existingTimes.filter(Boolean) as string[]);
-      const add = newTimes.filter((t) => t && !used.has(t));
-      const addSorted = add
-        .map((t) => ({ t, m: minutesFromTime(`${t}:00`) ?? 0 }))
-        .sort((a, b) => a.m - b.m)
-        .map((x) => x.t);
-      merged = [...existingTimes];
-      for (const t of addSorted) {
-        const idx = merged.findIndex((x) => !x);
-        if (idx < 0) break;
-        merged[idx] = t;
-      }
-    } else {
-      const all = [...(existingTimes.filter(Boolean) as string[]), ...newTimes]
-        .map((t) => String(t).slice(0, 5))
-        .filter(Boolean);
-      const uniq = Array.from(new Set(all));
-      merged = uniq
-        .map((t) => ({ t, m: minutesFromTime(`${t}:00`) ?? 0 }))
-        .sort((a, b) => a.m - b.m)
-        .map((x) => x.t)
-        .slice(0, 6);
-      while (merged.length < 6) merged.push(null);
+    // Mescla todas as marcações (existentes + novas) preservando ordem cronológica.
+    // NÃO deduplicamos horários iguais — duas batidas no mesmo minuto são marcações
+    // reais distintas que devem ocupar slots separados (ex: erro de bater duas vezes).
+    const existingFilled = existingTimes.filter(Boolean) as string[];
+    const newSeen = new Map<string, number>();
+    const novasParaAdicionar: string[] = [];
+    for (const t of newTimes) {
+      if (!t) continue;
+      const cnt = (newSeen.get(t) ?? 0) + 1;
+      newSeen.set(t, cnt);
+      // Só pula se essa MESMA hora já aparecer no existente o mesmo número de vezes
+      const existeQtd = existingFilled.filter((x) => x === t).length;
+      if (cnt <= existeQtd) continue;
+      novasParaAdicionar.push(t);
     }
+
+    const todas = [...existingFilled, ...novasParaAdicionar]
+      .map((t) => ({ t, m: minutesFromTime(`${t}:00`) ?? 0 }))
+      .sort((a, b) => a.m - b.m)
+      .map((x) => x.t);
+
+    if (todas.length > 6) {
+      marcacoesExcedentes += todas.length - 6;
+    }
+
+    const merged: Array<string | null> = todas.slice(0, 6);
+    while (merged.length < 6) merged.push(null);
 
     const pick = (i: number) => (merged[i] ? `${merged[i]}:00` : null);
     const lastNew = sortedNew.reduce((acc, cur) => (cur.nsr > acc.nsr ? cur : acc), sortedNew[0]);
@@ -444,7 +446,7 @@ function groupMarksIntoDailyRecords(
     });
   }
 
-  return { records, maiorNsr };
+  return { records, maiorNsr, marcacoesExcedentes };
 }
 
 export function AdminPontoEletronico() {
@@ -1174,7 +1176,7 @@ export function AdminPontoEletronico() {
       }
     }
 
-    const { records, maiorNsr } = groupMarksIntoDailyRecords(marks, equip.id, existingByKey);
+    const { records, maiorNsr, marcacoesExcedentes } = groupMarksIntoDailyRecords(marks, equip.id, existingByKey);
     if (records.length === 0) {
       const dica = cpfsValidos.size === 0
         ? "Nenhum funcionário encontrado na tabela de admissões."
@@ -1205,6 +1207,7 @@ export function AdminPontoEletronico() {
       maiorNsr,
       cpfResolvido,
       pisResolvido,
+      marcacoesExcedentes,
     };
   };
 
@@ -1219,15 +1222,20 @@ export function AdminPontoEletronico() {
       let totalDias = 0;
       let totalMarcacoes = 0;
       let totalNaoMapeadas = 0;
+      let totalExcedentes = 0;
       for (const e of targets) {
         const r = await syncEquipamento(e);
         totalDias += r.diasImportados;
         totalMarcacoes += r.marcacoesLidas;
         totalNaoMapeadas += r.cpfsNaoEncontrados;
+        totalExcedentes += r.marcacoesExcedentes ?? 0;
       }
+      const partes = [`${totalDias} dia(s) importado(s)`, `${totalMarcacoes} marcação(ões)`];
+      if (totalNaoMapeadas) partes.push(`${totalNaoMapeadas} não mapeada(s)`);
+      if (totalExcedentes) partes.push(`${totalExcedentes} excedente(s) (mais de 6 batidas no dia)`);
       toast({
         title: "Sincronização concluída",
-        description: `${totalDias} dia(s) importado(s) • ${totalMarcacoes} marcação(ões)` + (totalNaoMapeadas ? ` • ${totalNaoMapeadas} não mapeada(s)` : ""),
+        description: partes.join(" • "),
       });
       qc.invalidateQueries({ queryKey: ["equipamentos_ponto"] });
       qc.invalidateQueries({ queryKey: ["registros_ponto"] });
