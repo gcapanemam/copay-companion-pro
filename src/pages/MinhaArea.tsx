@@ -409,6 +409,87 @@ function PortalPonto({ cpf }: { cpf: string }) {
     return m;
   }, [solicitacoesPendentes]);
 
+  // ---- Jornada vinculada ao funcionário (com fallback para padrão 8h) ----
+  const { data: jornada = JORNADA_PADRAO } = useQuery<JornadaLike>({
+    queryKey: ["portal-ponto-jornada", cpfNorm],
+    queryFn: async () => {
+      if (!cpfNorm) return JORNADA_PADRAO;
+      const suffix9 = cpfNorm.slice(-9);
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: vinc } = await supabase
+        .from("funcionario_jornada")
+        .select("jornada_id, vigencia_inicio, vigencia_fim")
+        .like("cpf", `%${suffix9}`)
+        .lte("vigencia_inicio", today)
+        .order("vigencia_inicio", { ascending: false })
+        .limit(1);
+      const v = (vinc || []).find((x) => !x.vigencia_fim || x.vigencia_fim >= today);
+      if (!v) return JORNADA_PADRAO;
+      const { data: j } = await supabase
+        .from("jornadas_trabalho")
+        .select("carga_diaria_min, carga_semanal_min, intervalo_obrigatorio_min, tolerancia_min, dias_semana, entrada_padrao, saida_padrao")
+        .eq("id", v.jornada_id)
+        .maybeSingle();
+      if (!j) return JORNADA_PADRAO;
+      const dias = Array.isArray(j.dias_semana) ? (j.dias_semana as number[]) : JORNADA_PADRAO.dias_semana;
+      return {
+        carga_diaria_min: j.carga_diaria_min,
+        carga_semanal_min: j.carga_semanal_min,
+        intervalo_obrigatorio_min: j.intervalo_obrigatorio_min,
+        tolerancia_min: j.tolerancia_min,
+        dias_semana: dias,
+        entrada_padrao: j.entrada_padrao,
+        saida_padrao: j.saida_padrao,
+      };
+    },
+    enabled: Boolean(cpfNorm),
+  });
+
+  // ---- Banco de horas: busca movimentos do CPF ----
+  const { data: bancoMovimentos = [] } = useQuery({
+    queryKey: ["portal-ponto-banco", cpfNorm],
+    queryFn: async () => {
+      if (!cpfNorm) return [];
+      const suffix9 = cpfNorm.slice(-9);
+      const { data } = await supabase
+        .from("banco_horas_movimentos")
+        .select("minutos, data_referencia, expira_em, origem, descricao, created_at")
+        .like("cpf", `%${suffix9}`)
+        .order("created_at", { ascending: false })
+        .limit(60);
+      return data || [];
+    },
+    enabled: Boolean(cpfNorm),
+  });
+
+  const saldoBanco = useMemo(() => calcularBancoHoras(bancoMovimentos), [bancoMovimentos]);
+
+  // ---- Cálculo agregado do período (para dashboard cards) ----
+  const calculosByDia = useMemo(() => {
+    const m = new Map<string, CalculoDia>();
+    for (const r of registros || []) {
+      const dia = String(r.data || "").slice(0, 10);
+      if (!dia) continue;
+      m.set(dia, calcularJornadaDia(r, jornada));
+    }
+    return m;
+  }, [registros, jornada]);
+
+  const totaisPeriodo = useMemo(() => {
+    let trabalhadas = 0;
+    let esperadas = 0;
+    let extras = 0;
+    let irregularidades = 0;
+    for (const c of calculosByDia.values()) {
+      trabalhadas += c.trabalhadas_min;
+      esperadas += c.esperadas_min;
+      extras += c.extras_min;
+      if (c.status === "irregular") irregularidades += 1;
+    }
+    return { trabalhadas, esperadas, extras, irregularidades };
+  }, [calculosByDia]);
+
+
   const saveManual = async () => {
     const dia = String(manualDia || "").slice(0, 10);
     const motivo = String(manualMotivo || "").trim();
