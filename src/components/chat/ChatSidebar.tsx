@@ -41,11 +41,25 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
   const isAdmin = meuCpf === "admin";
 
   const loadConversas = useCallback(async () => {
+    const getPreviewText = (conteudo?: string) => {
+      if (!conteudo) return "";
+      try {
+        const parsed = JSON.parse(conteudo);
+        if (parsed && typeof parsed === "object" && parsed.type === "image") return "Imagem";
+        if (parsed && typeof parsed === "object" && parsed.type === "file") {
+          const name = typeof parsed.name === "string" ? parsed.name : "Arquivo";
+          return `Arquivo: ${name}`;
+        }
+      } catch {
+      }
+      return conteudo;
+    };
+
     const { data: membros } = await supabase
       .from("chat_membros").select("conversa_id").eq("cpf", meuCpf);
     if (!membros || membros.length === 0) { setConversas([]); return; }
 
-    const ids = membros.map(m => m.conversa_id);
+    const ids = Array.from(new Set(membros.map(m => m.conversa_id)));
 
     const [convsRes, allMembrosRes, allMsgsRes] = await Promise.all([
       supabase.from("chat_conversas").select("*").in("id", ids),
@@ -66,10 +80,17 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
     }
 
     let namesMap: Record<string, string> = {};
+    const activeCpfs = new Set<string>(["admin"]);
     if (outroCpfs.size > 0) {
       const { data: adms } = await supabase
-        .from("admissoes").select("cpf, nome_completo").in("cpf", Array.from(outroCpfs));
-      (adms || []).forEach(a => { namesMap[a.cpf] = a.nome_completo; });
+        .from("admissoes")
+        .select("cpf, nome_completo")
+        .in("cpf", Array.from(outroCpfs))
+        .is("data_demissao", null);
+      (adms || []).forEach(a => {
+        namesMap[a.cpf] = a.nome_completo;
+        activeCpfs.add(a.cpf);
+      });
     }
 
     const otherMsgIds = allMsgs.filter(m => m.remetente_cpf !== meuCpf).map(m => m.id);
@@ -97,6 +118,7 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
       let outroNome = c.nome || "";
       if (c.tipo === "individual") {
         const outro = allMembros.find(m => m.conversa_id === c.id && m.cpf !== meuCpf);
+        if (outro && !activeCpfs.has(outro.cpf)) return null as any;
         outroNome = outro ? (namesMap[outro.cpf] || outro.cpf) : "";
       }
 
@@ -109,14 +131,16 @@ export const ChatSidebar = ({ meuCpf, conversaAtiva, onSelectConversa }: ChatSid
         tipo: c.tipo,
         nome: c.nome,
         outroNome,
-        ultimaMensagem: lastMsg?.conteudo || "",
+        ultimaMensagem: getPreviewText(lastMsg?.conteudo),
         ultimaData: lastMsg?.created_at || c.created_at,
         naoLidas,
       };
-    });
+    }).filter(Boolean) as Conversa[];
 
-    result.sort((a, b) => new Date(b.ultimaData || "").getTime() - new Date(a.ultimaData || "").getTime());
-    setConversas(result);
+    const uniqueResult = Array.from(new Map(result.map((c) => [c.id, c])).values());
+
+    uniqueResult.sort((a, b) => new Date(b.ultimaData || "").getTime() - new Date(a.ultimaData || "").getTime());
+    setConversas(uniqueResult);
   }, [meuCpf]);
 
   const debouncedLoad = useCallback(() => {

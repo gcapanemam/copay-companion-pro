@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import * as XLSX from "xlsx";
 
 export function AdminEPIs() {
   const [cpf, setCpf] = useState("");
+  const [filtroUnidade, setFiltroUnidade] = useState("__all__");
+  const [filtroDepartamento, setFiltroDepartamento] = useState("__all__");
   const [tipoEpi, setTipoEpi] = useState("");
   const [dataEntrega, setDataEntrega] = useState("");
   const [dataValidade, setDataValidade] = useState("");
@@ -22,6 +24,25 @@ export function AdminEPIs() {
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const { data: funcionarios } = useQuery({
+    queryKey: ["admin-epi-funcionarios"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("admissoes")
+        .select("cpf, nome_completo, unidade, departamento")
+        .is("data_demissao", null)
+        .order("nome_completo");
+      if (error) throw error;
+      const unique = new Map<string, { cpf: string; nome_completo: string; unidade: string | null; departamento: string | null }>();
+      (data || []).forEach((f) => {
+        const cpfKey = String(f.cpf || "").replace(/\D/g, "");
+        if (!cpfKey) return;
+        if (!unique.has(cpfKey)) unique.set(cpfKey, { ...f, cpf: cpfKey });
+      });
+      return Array.from(unique.values());
+    },
+  });
 
   const { data: epis, isLoading } = useQuery({
     queryKey: ["admin-epis"],
@@ -39,6 +60,26 @@ export function AdminEPIs() {
       return t || [];
     },
   });
+
+  const unidades = Array.from(
+    new Set((funcionarios || []).map((f) => f.unidade || "Sem unidade"))
+  ).sort();
+  const departamentos = Array.from(
+    new Set((funcionarios || []).map((f) => f.departamento || "Sem departamento"))
+  ).sort();
+
+  const funcionariosFiltrados = (funcionarios || []).filter((f) => {
+    const uni = f.unidade || "Sem unidade";
+    const dep = f.departamento || "Sem departamento";
+    const matchUnidade = filtroUnidade === "__all__" || uni === filtroUnidade;
+    const matchDep = filtroDepartamento === "__all__" || dep === filtroDepartamento;
+    return matchUnidade && matchDep;
+  });
+
+  useEffect(() => {
+    if (!cpf) return;
+    if (!funcionariosFiltrados.some((f) => f.cpf === cpf)) setCpf("");
+  }, [cpf, funcionariosFiltrados]);
 
   const formatCpf = (v: string) => {
     const n = v.replace(/\D/g, "").slice(0, 11);
@@ -116,6 +157,8 @@ export function AdminEPIs() {
   };
 
   const getNome = (cpfVal: string) => {
+    const f = (funcionarios || []).find(x => x.cpf === cpfVal);
+    if (f?.nome_completo) return f.nome_completo;
     const b = (beneficiarios || []).find(x => x.cpf?.replace(/\D/g, "") === cpfVal);
     return b?.nome || cpfVal;
   };
@@ -127,16 +170,42 @@ export function AdminEPIs() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div className="space-y-2">
-              <Label>Funcionário</Label>
-              <Select value={cpf} onValueChange={setCpf}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <Label>Unidade</Label>
+              <Select value={filtroUnidade} onValueChange={(v) => { setFiltroUnidade(v); setFiltroDepartamento("__all__"); }}>
+                <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
                 <SelectContent>
-                  {(beneficiarios || []).map((b) => (
-                    <SelectItem key={b.cpf} value={b.cpf!}>{b.nome}</SelectItem>
+                  <SelectItem value="__all__">Todas</SelectItem>
+                  {unidades.map((u) => (
+                    <SelectItem key={u} value={u}>{u}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>Departamento</Label>
+              <Select value={filtroDepartamento} onValueChange={setFiltroDepartamento}>
+                <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Todos</SelectItem>
+                  {departamentos.map((d) => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Funcionário</Label>
+              <Select value={cpf} onValueChange={setCpf}>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  {funcionariosFiltrados.map((f) => (
+                    <SelectItem key={f.cpf} value={f.cpf}>{f.nome_completo}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div className="space-y-2">
               <Label>Tipo EPI</Label>
               <Input placeholder="Ex: Capacete, Luva, Bota" value={tipoEpi} onChange={(e) => setTipoEpi(e.target.value)} />
@@ -145,17 +214,17 @@ export function AdminEPIs() {
               <Label>Quantidade</Label>
               <Input type="number" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} />
             </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div className="space-y-2">
               <Label>Data Entrega</Label>
               <Input type="date" value={dataEntrega} onChange={(e) => setDataEntrega(e.target.value)} />
             </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div className="space-y-2">
               <Label>Data Validade</Label>
               <Input type="date" value={dataValidade} onChange={(e) => setDataValidade(e.target.value)} />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 md:col-span-2">
               <Label>Observação</Label>
               <Input value={observacao} onChange={(e) => setObservacao(e.target.value)} />
             </div>

@@ -39,8 +39,18 @@ export const ChatNovaConversa = ({ open, onOpenChange, meuCpf, onConversaCriada 
   }, [open]);
 
   const loadFuncionarios = async () => {
-    const { data } = await supabase.from("admissoes").select("cpf, nome_completo").order("nome_completo");
-    setFuncionarios((data || []).filter(f => f.cpf !== meuCpf).map(f => ({ cpf: f.cpf, nome: f.nome_completo })));
+    const { data } = await supabase
+      .from("admissoes")
+      .select("cpf, nome_completo")
+      .is("data_demissao", null)
+      .order("nome_completo");
+    const unique = new Map<string, Funcionario>();
+    (data || [])
+      .filter((f) => f.cpf !== meuCpf)
+      .forEach((f) => {
+        if (!unique.has(f.cpf)) unique.set(f.cpf, { cpf: f.cpf, nome: f.nome_completo });
+      });
+    setFuncionarios(Array.from(unique.values()));
   };
 
   const toggleSelecionado = (cpf: string) => {

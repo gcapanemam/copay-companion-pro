@@ -4,7 +4,7 @@ import { TabelaAnual } from "@/components/TabelaAnual";
 import { SeletorAno } from "@/components/SeletorAno";
 import {
   Activity, Trash2, LogOut, Heart, FileText, ShieldCheck, Bus,
-  CalendarX, ClipboardList, Users, Megaphone, MessageCircle,
+  ClipboardList, Users, Megaphone, MessageCircle,
   ListTodo, Settings, LayoutDashboard, Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,6 @@ import {
 import { AdminContracheques } from "@/components/admin/AdminContracheques";
 import { AdminEPIs } from "@/components/admin/AdminEPIs";
 import { AdminValeTransporte } from "@/components/admin/AdminValeTransporte";
-import { AdminFaltas } from "@/components/admin/AdminFaltas";
 import { AdminAdmissaoCampos } from "@/components/admin/AdminAdmissaoCampos";
 import { AdminFuncionarios } from "@/components/admin/AdminFuncionarios";
 import { AdminComunicados } from "@/components/admin/AdminComunicados";
@@ -45,7 +44,7 @@ const BadgeCount = ({ count }: { count: number }) => {
 };
 
 type Section =
-  | "dashboard" | "funcionarios" | "contracheques" | "vt" | "faltas" | "ponto_eletronico"
+  | "dashboard" | "funcionarios" | "contracheques" | "vt" | "ponto_eletronico"
   | "plano" | "epis" | "comunicados" | "chat" | "tarefas" | "admissao" | "configuracoes";
 
 const navGroups = [
@@ -67,7 +66,6 @@ const navGroups = [
     items: [
       { id: "contracheques" as Section, label: "Contracheques", icon: FileText },
       { id: "vt" as Section, label: "Vale Transporte", icon: Bus },
-      { id: "faltas" as Section, label: "Ponto", icon: CalendarX },
       { id: "ponto_eletronico" as Section, label: "Ponto Eletrônico", icon: Clock },
     ],
   },
@@ -138,11 +136,19 @@ function AdminSidebar({ active, onNavigate, unreadCounts }: { active: Section; o
 
 const Index = () => {
   const [section, setSection] = useState<Section>("dashboard");
+  const [unidadeSelecionada, setUnidadeSelecionada] = useState<string | null>(null);
   const [ano, setAno] = useState(2025);
   const [refreshKey, setRefreshKey] = useState(0);
   const [clearing, setClearing] = useState(false);
   const { toast } = useToast();
   const unreadCounts = useUnreadCounts({ cpf: "admin", isAdmin: true });
+
+  const handleSidebarNavigate = (s: Section) => {
+    setSection(s);
+    if (s === "funcionarios") {
+      setUnidadeSelecionada(null);
+    }
+  };
 
   const handleClearData = async () => {
     setClearing(true);
@@ -164,11 +170,18 @@ const Index = () => {
 
   const renderContent = () => {
     switch (section) {
-      case "dashboard": return <AdminDashboard />;
-      case "funcionarios": return <AdminFuncionarios />;
+      case "dashboard":
+        return (
+          <AdminDashboard
+            onSelectUnidade={(unidade) => {
+              setUnidadeSelecionada(unidade);
+              setSection("funcionarios");
+            }}
+          />
+        );
+      case "funcionarios": return <AdminFuncionarios initialUnidade={unidadeSelecionada} />;
       case "contracheques": return <AdminContracheques />;
       case "vt": return <AdminValeTransporte />;
-      case "faltas": return <AdminFaltas />;
       case "ponto_eletronico": return <AdminPontoEletronico />;
       case "plano":
         return (
@@ -214,7 +227,7 @@ const Index = () => {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <AdminSidebar active={section} onNavigate={setSection} unreadCounts={unreadCounts} />
+        <AdminSidebar active={section} onNavigate={handleSidebarNavigate} unreadCounts={unreadCounts} />
 
         <div className="flex-1 flex flex-col min-w-0">
           <header className="h-14 border-b bg-card flex items-center justify-between px-4 shrink-0">

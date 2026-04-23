@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Eye, Send, Trash2, Users, Building, Briefcase, Globe } from "lucide-react";
+import { Plus, Eye, Send, Trash2, Users, Building, Briefcase, Globe, Image as ImageIcon, X } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -42,6 +42,7 @@ export const AdminComunicados = () => {
   const [leituras, setLeituras] = useState<Leitura[]>([]);
   const [titulo, setTitulo] = useState("");
   const [mensagem, setMensagem] = useState("");
+  const [imagem, setImagem] = useState<File | null>(null);
   const [tipoDestinatario, setTipoDestinatario] = useState("todos");
   const [valorDestinatario, setValorDestinatario] = useState("");
   const [selectedCpfs, setSelectedCpfs] = useState<string[]>([]);
@@ -53,6 +54,26 @@ export const AdminComunicados = () => {
 
   useEffect(() => { fetchComunicados(); fetchFuncionarios(); }, []);
 
+  const imagemPreview = useMemo(() => (imagem ? URL.createObjectURL(imagem) : null), [imagem]);
+  useEffect(() => {
+    return () => {
+      if (imagemPreview) URL.revokeObjectURL(imagemPreview);
+    };
+  }, [imagemPreview]);
+
+  const parseMensagem = (raw: string) => {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        const text = typeof (parsed as any).text === "string" ? (parsed as any).text : raw;
+        const imageUrl = typeof (parsed as any).imageUrl === "string" ? (parsed as any).imageUrl : null;
+        return { text, imageUrl };
+      }
+    } catch {
+    }
+    return { text: raw, imageUrl: null as string | null };
+  };
+
   const fetchComunicados = async () => {
     setLoading(true);
     const { data } = await supabase.from("comunicados").select("*").order("created_at", { ascending: false });
@@ -61,11 +82,21 @@ export const AdminComunicados = () => {
   };
 
   const fetchFuncionarios = async () => {
-    const { data } = await supabase.from("admissoes").select("cpf, nome_completo, unidade, departamento");
-    const funcs = data || [];
+    const { data } = await supabase
+      .from("admissoes")
+      .select("cpf, nome_completo, unidade, departamento")
+      .is("data_demissao", null)
+      .order("nome_completo");
+
+    const unique = new Map<string, { cpf: string; nome_completo: string; unidade: string | null; departamento: string | null }>();
+    (data || []).forEach((f) => {
+      if (!unique.has(f.cpf)) unique.set(f.cpf, f);
+    });
+
+    const funcs = Array.from(unique.values());
     setFuncionarios(funcs);
-    setUnidades([...new Set(funcs.map(f => f.unidade).filter(Boolean) as string[])]);
-    setDepartamentos([...new Set(funcs.map(f => f.departamento).filter(Boolean) as string[])]);
+    setUnidades(Array.from(new Set(funcs.map(f => f.unidade).filter(Boolean) as string[])).sort());
+    setDepartamentos(Array.from(new Set(funcs.map(f => f.departamento).filter(Boolean) as string[])).sort());
   };
 
   const handleCreate = async () => {
@@ -84,9 +115,28 @@ export const AdminComunicados = () => {
 
     setSaving(true);
     try {
+      let imageUrl: string | null = null;
+      if (imagem) {
+        if (!imagem.type.startsWith("image/")) throw new Error("Selecione um arquivo de imagem.");
+        if (imagem.size > 8 * 1024 * 1024) throw new Error("Imagem muito grande (máximo 8MB).");
+
+        const ext = imagem.name.includes(".") ? imagem.name.split(".").pop() : "";
+        const safeExt = String(ext || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+        const path = `comunicados/${Date.now()}_${Math.random().toString(16).slice(2)}.${safeExt}`;
+
+        const { error: upErr } = await supabase.storage
+          .from("funcionarios-documentos")
+          .upload(path, imagem, { cacheControl: "3600", upsert: false, contentType: imagem.type });
+        if (upErr) throw upErr;
+
+        const { data: urlData } = supabase.storage.from("funcionarios-documentos").getPublicUrl(path);
+        imageUrl = urlData?.publicUrl || null;
+      }
+
+      const conteudo = imageUrl ? JSON.stringify({ text: mensagem, imageUrl }) : mensagem;
       const { data: created, error } = await supabase.from("comunicados").insert({
         titulo,
-        mensagem,
+        mensagem: conteudo,
         tipo_destinatario: tipoDestinatario,
         valor_destinatario: tipoDestinatario === "unidade" || tipoDestinatario === "departamento" ? valorDestinatario : null,
       }).select().single();
@@ -100,7 +150,7 @@ export const AdminComunicados = () => {
 
       toast({ title: "Sucesso", description: "Comunicado enviado." });
       setOpenCreate(false);
-      setTitulo(""); setMensagem(""); setTipoDestinatario("todos"); setValorDestinatario(""); setSelectedCpfs([]);
+      setTitulo(""); setMensagem(""); setImagem(null); setTipoDestinatario("todos"); setValorDestinatario(""); setSelectedCpfs([]);
       fetchComunicados();
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
@@ -130,6 +180,9 @@ export const AdminComunicados = () => {
       const { data: dests } = await supabase.from("comunicado_destinatarios").select("cpf").eq("comunicado_id", c.id);
       targetCpfs = (dests || []).map(d => d.cpf);
     }
+
+    const ativosSet = new Set(funcionarios.map(f => f.cpf));
+    targetCpfs = Array.from(new Set(targetCpfs)).filter(cpf => ativosSet.has(cpf));
 
     const { data: reads } = await supabase.from("comunicado_leituras").select("cpf, visualizado_em, confirmado_em").eq("comunicado_id", c.id);
     const readsMap = new Map((reads || []).map(r => [r.cpf, r]));
@@ -183,6 +236,26 @@ export const AdminComunicados = () => {
               <div className="space-y-2">
                 <Label>Mensagem</Label>
                 <Textarea value={mensagem} onChange={e => setMensagem(e.target.value)} placeholder="Conteúdo do comunicado" rows={5} />
+              </div>
+              <div className="space-y-2">
+                <Label>Imagem (opcional)</Label>
+                <div className="flex items-center gap-2">
+                  <Input type="file" accept="image/*" onChange={(e) => setImagem(e.target.files?.[0] || null)} />
+                  {imagem && (
+                    <Button type="button" variant="outline" size="icon" onClick={() => setImagem(null)} title="Remover imagem">
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {imagemPreview && (
+                  <div className="border rounded-md p-2 bg-muted/30">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                      <ImageIcon className="h-4 w-4" />
+                      <span className="truncate">{imagem?.name}</span>
+                    </div>
+                    <img src={imagemPreview} alt="Prévia" className="max-h-64 rounded-md border mx-auto" />
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Destinatários</Label>
@@ -308,8 +381,13 @@ export const AdminComunicados = () => {
           {selectedComunicado && (
             <div className="space-y-4">
               <div className="bg-muted p-4 rounded-md">
-                <p className="text-sm whitespace-pre-wrap">{selectedComunicado.mensagem}</p>
+                <p className="text-sm whitespace-pre-wrap">{parseMensagem(selectedComunicado.mensagem).text}</p>
               </div>
+              {parseMensagem(selectedComunicado.mensagem).imageUrl && (
+                <a href={parseMensagem(selectedComunicado.mensagem).imageUrl!} target="_blank" rel="noopener noreferrer">
+                  <img src={parseMensagem(selectedComunicado.mensagem).imageUrl!} alt="Imagem" className="max-h-96 rounded-md border mx-auto" />
+                </a>
+              )}
               <div className="flex gap-4 text-sm text-muted-foreground">
                 <span>Enviado: {formatDate(selectedComunicado.created_at)}</span>
                 <Badge variant="outline" className="gap-1">

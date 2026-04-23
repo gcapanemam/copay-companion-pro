@@ -35,6 +35,19 @@ export const PortalComunicados = ({ comunicados, cpf, unidade, departamento }: P
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
+  const parseMensagem = (raw: string) => {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        const text = typeof (parsed as any).text === "string" ? (parsed as any).text : raw;
+        const imageUrl = typeof (parsed as any).imageUrl === "string" ? (parsed as any).imageUrl : null;
+        return { text, imageUrl };
+      }
+    } catch {
+    }
+    return { text: raw, imageUrl: null as string | null };
+  };
+
   useEffect(() => {
     fetchLeituras();
   }, [cpf, comunicados]);
@@ -128,7 +141,7 @@ export const PortalComunicados = ({ comunicados, cpf, unidade, departamento }: P
                   {!visualizado && <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0" />}
                   <h3 className="font-semibold truncate">{c.titulo}</h3>
                 </div>
-                <p className="text-sm text-muted-foreground truncate">{c.mensagem}</p>
+                <p className="text-sm text-muted-foreground truncate">{parseMensagem(c.mensagem).text}</p>
                 <p className="text-xs text-muted-foreground mt-1">{new Date(c.created_at).toLocaleDateString("pt-BR")}</p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
@@ -156,8 +169,13 @@ export const PortalComunicados = ({ comunicados, cpf, unidade, departamento }: P
             <div className="space-y-4">
               <p className="text-xs text-muted-foreground">{new Date(selectedCom.created_at).toLocaleString("pt-BR")}</p>
               <div className="bg-muted p-4 rounded-md">
-                <p className="text-sm whitespace-pre-wrap">{selectedCom.mensagem}</p>
+                <p className="text-sm whitespace-pre-wrap">{parseMensagem(selectedCom.mensagem).text}</p>
               </div>
+              {parseMensagem(selectedCom.mensagem).imageUrl && (
+                <a href={parseMensagem(selectedCom.mensagem).imageUrl!} target="_blank" rel="noopener noreferrer">
+                  <img src={parseMensagem(selectedCom.mensagem).imageUrl!} alt="Imagem" className="max-h-96 rounded-md border mx-auto" />
+                </a>
+              )}
               {!leituras.get(selectedCom.id)?.confirmado_em && (
                 <Button onClick={() => handleConfirm(selectedCom.id)} disabled={loading} className="w-full">
                   <CheckCircle2 className="h-4 w-4 mr-1" />

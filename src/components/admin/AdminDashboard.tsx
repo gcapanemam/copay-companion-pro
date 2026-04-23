@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Users, DollarSign, Bus, Loader2 } from "lucide-react";
 import { SeletorAno } from "@/components/SeletorAno";
 
@@ -24,7 +24,11 @@ interface UnidadeData {
   totalVT: number;
 }
 
-export const AdminDashboard = () => {
+type AdminDashboardProps = {
+  onSelectUnidade?: (unidade: string) => void;
+};
+
+export const AdminDashboard = ({ onSelectUnidade }: AdminDashboardProps) => {
   const [loading, setLoading] = useState(true);
   const [ano, setAno] = useState(new Date().getFullYear());
   const [data, setData] = useState<UnidadeData[]>([]);
@@ -39,7 +43,7 @@ export const AdminDashboard = () => {
       // Get all admissoes with unidade
       const { data: admissoes } = await supabase
         .from("admissoes")
-        .select("cpf, unidade");
+        .select("cpf, unidade, data_demissao");
 
       // Get vale transporte for the year
       const { data: vts } = await supabase
@@ -50,7 +54,10 @@ export const AdminDashboard = () => {
       // Group by unidade
       const unidadeMap = new Map<string, { funcionarios: Set<string>; totalVT: number }>();
 
-      (admissoes || []).forEach((a) => {
+      const admissoesAtivas = (admissoes || []).filter((a) => !a.data_demissao);
+      const cpfsAtivos = new Set(admissoesAtivas.map((a) => a.cpf));
+
+      admissoesAtivas.forEach((a) => {
         const unidade = a.unidade || "Sem unidade";
         if (!unidadeMap.has(unidade)) {
           unidadeMap.set(unidade, { funcionarios: new Set(), totalVT: 0 });
@@ -60,11 +67,12 @@ export const AdminDashboard = () => {
 
       // Map CPF -> unidade for VT lookup
       const cpfUnidade = new Map<string, string>();
-      (admissoes || []).forEach((a) => {
+      admissoesAtivas.forEach((a) => {
         cpfUnidade.set(a.cpf, a.unidade || "Sem unidade");
       });
 
       (vts || []).forEach((vt) => {
+        if (!cpfsAtivos.has(vt.cpf)) return;
         const unidade = cpfUnidade.get(vt.cpf) || "Sem unidade";
         if (!unidadeMap.has(unidade)) {
           unidadeMap.set(unidade, { funcionarios: new Set(), totalVT: 0 });
@@ -93,6 +101,11 @@ export const AdminDashboard = () => {
 
   const formatCurrency = (value: number) =>
     value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  const handleUnidadeClick = (unidade: string) => {
+    if (!unidade) return;
+    onSelectUnidade?.(unidade);
+  };
 
   if (loading) {
     return (
@@ -183,7 +196,14 @@ export const AdminDashboard = () => {
                       color: "hsl(var(--foreground))",
                     }}
                   />
-                  <Bar dataKey="totalFuncionarios" name="Funcionários" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                  <Bar
+                    dataKey="totalFuncionarios"
+                    name="Funcionários"
+                    fill="hsl(var(--primary))"
+                    radius={[0, 4, 4, 0]}
+                    cursor="pointer"
+                    onClick={(e: any) => handleUnidadeClick(e?.payload?.unidade)}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -213,6 +233,8 @@ export const AdminDashboard = () => {
                     }
                     labelLine={true}
                     fontSize={11}
+                    cursor="pointer"
+                    onClick={(e: any) => handleUnidadeClick(e?.payload?.unidade)}
                   >
                     {data.map((_, i) => (
                       <Cell key={i} fill={COLORS[i % COLORS.length]} />

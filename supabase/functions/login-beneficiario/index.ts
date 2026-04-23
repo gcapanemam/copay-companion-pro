@@ -77,8 +77,6 @@ async function getUserData(supabase: any, cleanCpf: string, selectedAno: number)
   const { data: contracheques } = await supabase.from("contracheques").select("*").eq("cpf", cleanCpf).eq("ano", selectedAno).order("mes");
   const { data: epis } = await supabase.from("epis").select("*").eq("cpf", cleanCpf).order("data_entrega", { ascending: false });
   const { data: valeTransporte } = await supabase.from("vale_transporte").select("*").eq("cpf", cleanCpf).eq("ano", selectedAno).order("mes");
-  const { data: faltas } = await supabase.from("faltas").select("*").eq("cpf", cleanCpf).order("data_falta", { ascending: false });
-  const { data: registrosPonto } = await supabase.from("registros_ponto").select("*").eq("cpf", cleanCpf).order("data", { ascending: false });
   const { data: admissao } = await supabase.from("admissoes").select("*").eq("cpf", cleanCpf).maybeSingle();
 
   const userUnidade = admissao?.unidade || null;
@@ -105,8 +103,6 @@ async function getUserData(supabase: any, cleanCpf: string, selectedAno: number)
     contracheques: contracheques || [],
     epis: epis || [],
     vale_transporte: valeTransporte || [],
-    faltas: faltas || [],
-    registros_ponto: registrosPonto || [],
     admissao: admissao || null,
     comunicados,
   };

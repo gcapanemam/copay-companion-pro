@@ -73,6 +73,25 @@ export function AdminTarefas() {
     },
   });
 
+  const { data: nomesFuncionarios } = useQuery({
+    queryKey: ["admin-admissoes-nomes-tarefas"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("admissoes")
+        .select("cpf, nome_completo")
+        .order("nome_completo");
+      if (error) throw error;
+      const unique = new Map<string, string>();
+      (data || []).forEach((a) => {
+        const cpfKey = String(a.cpf || "").replace(/\D/g, "");
+        const nome = String(a.nome_completo || "").trim();
+        if (!cpfKey || !nome) return;
+        if (!unique.has(cpfKey)) unique.set(cpfKey, nome);
+      });
+      return Object.fromEntries(unique.entries()) as Record<string, string>;
+    },
+  });
+
   const handleResolver = async (id: string) => {
     try {
       const { error } = await supabase.from("tarefa_atualizacoes").update({ resolvida: true }).eq("id", id);
@@ -87,9 +106,17 @@ export function AdminTarefas() {
   const { data: admissoes } = useQuery({
     queryKey: ["admin-admissoes-tarefas"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("admissoes").select("cpf, nome_completo, departamento, unidade").order("nome_completo");
+      const { data, error } = await supabase
+        .from("admissoes")
+        .select("cpf, nome_completo, departamento, unidade")
+        .is("data_demissao", null)
+        .order("nome_completo");
       if (error) throw error;
-      return data || [];
+      const unique = new Map<string, any>();
+      (data || []).forEach((a) => {
+        if (!unique.has(a.cpf)) unique.set(a.cpf, a);
+      });
+      return Array.from(unique.values());
     },
   });
 
@@ -115,8 +142,8 @@ export function AdminTarefas() {
     enabled: !!detailTask,
   });
 
-  const unidades = [...new Set((admissoes || []).map(a => a.unidade).filter(Boolean))];
-  const departamentos = [...new Set((admissoes || []).map(a => a.departamento).filter(Boolean))];
+  const unidades = Array.from(new Set((admissoes || []).map(a => a.unidade).filter(Boolean))).sort();
+  const departamentos = Array.from(new Set((admissoes || []).map(a => a.departamento).filter(Boolean))).sort();
 
   const resetForm = () => {
     setTitulo(""); setDescricao(""); setTipoDestinatario("funcionario");
@@ -162,10 +189,14 @@ export function AdminTarefas() {
 
   const filtered = (tarefas || []).filter(t => filtroStatus === "__all__" || t.status === filtroStatus);
 
+  const getNomeByCpf = (cpf: string) => {
+    const cpfKey = String(cpf || "").replace(/\D/g, "");
+    return nomesFuncionarios?.[cpfKey] || cpfKey || cpf;
+  };
+
   const getDestinatarioLabel = (t: any) => {
     if (t.tipo_destinatario === "funcionario") {
-      const func = (admissoes || []).find(a => a.cpf === t.valor_destinatario);
-      return func ? func.nome_completo : t.valor_destinatario;
+      return getNomeByCpf(t.valor_destinatario);
     }
     return `${t.tipo_destinatario === "departamento" ? "Depto" : "Unidade"}: ${t.valor_destinatario}`;
   };
@@ -177,7 +208,7 @@ export function AdminTarefas() {
         <div className="space-y-2">
           {pendencias.map((p: any) => {
             const tarefa = p.tarefas;
-            const funcName = (admissoes || []).find((a: any) => a.cpf === p.cpf)?.nome_completo || p.cpf;
+            const funcName = getNomeByCpf(p.cpf);
             return (
               <Alert key={p.id} className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20">
                 <AlertTriangle className="h-4 w-4 text-yellow-600" />

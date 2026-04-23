@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,7 +44,7 @@ function normalizeCpf(value: unknown) {
   return digits.padStart(11, "0");
 }
 
-export function AdminFuncionarios() {
+export function AdminFuncionarios({ initialUnidade }: { initialUnidade?: string | null } = {}) {
   const [filtroUnidade, setFiltroUnidade] = useState("__all__");
   const [filtroDepartamento, setFiltroDepartamento] = useState("__all__");
   const [busca, setBusca] = useState("");
@@ -112,8 +112,19 @@ export function AdminFuncionarios() {
   })();
 
   const UNIDADES_VALIDAS = ["INSTITUTO", "POEMAS", "VERSOS", "VERSOS INFANTIL", "FUND2", "MEDIO"];
-  const unidades = UNIDADES_VALIDAS;
+  const unidadesEncontradas = Array.from(
+    new Set((funcionarios.map(f => f.admissao?.unidade || "Sem unidade").filter(Boolean) as string[]))
+  ).sort();
+  const unidades = Array.from(new Set([...UNIDADES_VALIDAS, ...unidadesEncontradas]));
   const departamentos = [...new Set(funcionarios.map(f => f.dados?.departamento || f.admissao?.departamento || "").filter(Boolean))].sort();
+
+  useEffect(() => {
+    if (!initialUnidade) return;
+    setFiltroUnidade(initialUnidade);
+    setFiltroDepartamento("__all__");
+    setBusca("");
+    setSelectedCpfs(new Set());
+  }, [initialUnidade]);
 
   const applyFilters = (list: any[]) => {
     return list.filter((f) => {
@@ -122,7 +133,7 @@ export function AdminFuncionarios() {
       const matchNome = !term
         ? true
         : f.nome.toLowerCase().includes(term) || (cpfTerm.length > 0 && f.cpf.includes(cpfTerm));
-      const uni = f.admissao?.unidade || "";
+      const uni = f.admissao?.unidade || "Sem unidade";
       const dep = f.dados?.departamento || f.admissao?.departamento || "";
       const matchUnidade = filtroUnidade === "__all__" || uni === filtroUnidade;
       const matchDep = filtroDepartamento === "__all__" || dep === filtroDepartamento;

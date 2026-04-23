@@ -1009,6 +1009,57 @@ export type Database = {
           },
         ]
       }
+      solicitacoes_ponto: {
+        Row: {
+          aprovado_em: string | null
+          aprovado_por: string | null
+          campo: string
+          cpf: string
+          created_at: string
+          data: string
+          id: string
+          motivo: string
+          observacao_admin: string | null
+          rejeitado_em: string | null
+          rejeitado_por: string | null
+          status: string
+          tipo: string
+          valor: string
+        }
+        Insert: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          campo: string
+          cpf: string
+          created_at?: string
+          data: string
+          id?: string
+          motivo: string
+          observacao_admin?: string | null
+          rejeitado_em?: string | null
+          rejeitado_por?: string | null
+          status?: string
+          tipo: string
+          valor: string
+        }
+        Update: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          campo?: string
+          cpf?: string
+          created_at?: string
+          data?: string
+          id?: string
+          motivo?: string
+          observacao_admin?: string | null
+          rejeitado_em?: string | null
+          rejeitado_por?: string | null
+          status?: string
+          tipo?: string
+          valor?: string
+        }
+        Relationships: []
+      }
       tarefa_atualizacoes: {
         Row: {
           conteudo: string | null
