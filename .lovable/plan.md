@@ -1,133 +1,56 @@
 
 
-# Plano: Sistema de Ponto Eletrônico Completo (CLT)
+# Importação Manual de AFD (Portaria 671 / CPF)
 
-## Estado atual (o que já existe)
+## O que vou adicionar
 
-- ✅ Tabela `registros_ponto` com 3 pares entrada/saída por dia
-- ✅ Tabela `solicitacoes_ponto` (ajustes + atestados) com status pendente/aprovado/rejeitado
-- ✅ Tabela `equipamentos_ponto` + integração REP Control iD (sync AFD/NSR)
-- ✅ Portal do funcionário: solicitar ajuste manual, enviar atestado (abono dia/horas/comprovante) com upload
-- ✅ Painel admin: aprovar/rejeitar, aplicar mudanças nos registros, log embutido em `motivo`
-- ❌ Sem cadastro de jornada (carga horária esperada por funcionário)
-- ❌ Sem cálculo formal de horas extras / atrasos / banco de horas
-- ❌ Sem dashboard de indicadores no Portal
-- ❌ Sem exportação (PDF espelho de ponto / Excel)
-- ❌ Sem geolocalização nas batidas manuais
-- ❌ Sem notificações de "esqueceu de bater ponto"
+Um botão **"Importar AFD (arquivo)"** na barra superior da aba *Equipamentos* (ao lado de "Sincronizar Todos") que abre um seletor de arquivo `.txt` e processa o AFD localmente — sem depender do REP estar online.
 
----
+## Fluxo
 
-## O que será construído
+1. Usuário clica em **Importar AFD (arquivo)** → escolhe um ou mais `.txt`
+2. Sistema lê o conteúdo no navegador (`FileReader`)
+3. Reaproveita a função `parseAfd` já existente (que já entende o layout Portaria 671 REP-C com timestamp ISO + CPF/PIS no final + CRC)
+4. Reaproveita `resolveCpfFromRest` (resolve CPF puro de 11 dígitos, CPF zero-padded de 12, ou PIS quando aparecer)
+5. Reaproveita `groupMarksIntoDailyRecords` (agrupa em entrada_1..saida_3, mescla com existentes, ordem cronológica, sem deduplicação)
+6. Faz upsert em `registros_ponto` (cpf+data)
+7. Mostra toast com: **dias importados**, **marcações lidas**, **CPFs não mapeados**, **excedentes (>6 batidas/dia)**, **arquivo processado**
 
-### 1. Schema (migrations)
+## Diferenças vs. sync automático
 
-**`jornadas_trabalho`** — tipos de jornada cadastráveis:
-- `id`, `nome`, `tipo` (`fixa` | `flexivel` | `escala_12x36` | `escala_6x1`), `carga_diaria_min`, `carga_semanal_min`, `intervalo_obrigatorio_min` (default 60), `tolerancia_min` (default 10), `dias_semana` (jsonb dias úteis), `entrada_padrao`, `saida_padrao`, `ativo`
+| | Sync automático | Importação manual (nova) |
+|---|---|---|
+| Origem | HTTP no REP | Arquivo `.txt` local |
+| `equipamento_id` | ID do equipamento sincronizado | Vínculo opcional: usuário escolhe equipamento ou deixa "Sem vínculo" |
+| `ultimo_nsr` | Atualiza no equipamento | **Não** atualiza (importação manual é histórico, não muda cursor de sync) |
+| Pré-validação | — | Detecta cabeçalho tipo "1" da Portaria 671 e mostra empresa/CNPJ/REP do arquivo antes de confirmar |
 
-**`funcionario_jornada`** — vincula CPF a uma jornada com vigência:
-- `cpf`, `jornada_id`, `vigencia_inicio`, `vigencia_fim`, `created_at`
+## Tela de pré-visualização
 
-**`config_horas_extras`** (singleton):
-- `adicional_50_pct`, `adicional_100_pct` (domingos/feriados), `tolerancia_min`, `permite_banco_horas` (bool), `expiracao_banco_meses` (default 6)
+Ao selecionar o arquivo, antes de gravar, abre um pequeno diálogo mostrando:
 
-**`banco_horas_movimentos`** — auditoria do banco:
-- `id`, `cpf`, `data_referencia`, `minutos` (positivo = crédito, negativo = débito), `origem` (`extra` | `falta` | `compensacao` | `expiracao`), `descricao`, `registro_ponto_id`, `expira_em`, `created_at`
+- Empresa / CNPJ extraídos do header (linha tipo 1)
+- Período coberto (primeira → última marcação)
+- Total de marcações tipo 3 detectadas
+- NSR mínimo e máximo
+- Seletor "Vincular ao equipamento" (lista os ativos + opção "Nenhum")
+- Botão **Confirmar importação** / **Cancelar**
 
-**`registros_ponto_auditoria`** — log imutável de alterações:
-- `id`, `registro_id`, `cpf`, `data`, `campo`, `valor_anterior`, `valor_novo`, `alterado_por`, `motivo`, `solicitacao_id`, `created_at`
+## Arquivo a alterar
 
-**`registros_ponto`** — adicionar colunas:
-- `latitude`, `longitude`, `precisao_metros`, `endereco_aproximado` (geo opcional na batida manual)
+- **`src/components/admin/AdminPontoEletronico.tsx`** — único arquivo. Adiciona:
+  - `<input type="file" accept=".txt,text/plain" multiple hidden ref={...} />`
+  - Botão "Importar AFD (arquivo)" no header (linha ~1258)
+  - Função `handleManualAfdImport(files: FileList)` que reusa `parseAfd` + `resolveCpfFromRest` + `groupMarksIntoDailyRecords` + upsert
+  - Mini-diálogo de pré-visualização (`Dialog` shadcn já importado em outras telas)
+  - Parser do header (linha tipo "1") para extrair empresa/CNPJ
 
-**`solicitacoes_ponto`** — adicionar coluna:
-- `data_fim` (para atestados multi-dia em uma única solicitação)
+## Compatibilidade com o arquivo de exemplo
 
-RLS: anon select/insert para próprio CPF; authenticated full em todas. `registros_ponto_auditoria` somente INSERT (imutável) + SELECT.
+O arquivo `AFD3135796700015900014003750372946REP_C.txt_1.txt` enviado:
+- 3.867 linhas, header tipo 1 + 3.866 marcações tipo 3
+- Layout: `NSR(9) + Tipo(1) + Timestamp ISO(24) + CPF padded(12) + CRC16(4 hex)` — já reconhecido por `parseAfd`
+- CPFs como `07981686016`, `14757861664`, `11497480604` — resolvidos via `cpfsValidos`/`cpfSuffix9ToCpf` em `resolveCpfFromRest`
 
-Trigger: ao UPDATE em `registros_ponto`, gravar diff em `registros_ponto_auditoria` automaticamente.
-
----
-
-### 2. Lógica de cálculo (helper compartilhado `src/lib/pontoCalculos.ts`)
-
-Funções puras com testes:
-- `calcularJornadaDia(registro, jornada)` → `{ trabalhadas_min, esperadas_min, extras_min, atraso_min, saida_antecipada_min, intervalo_min, irregularidades[] }`
-- `calcularBancoHoras(movimentos[], dataRef)` → `{ saldo_min, credito_min, debito_min, prestes_a_expirar_min }`
-- `aplicarTolerancia(diferenca, tolerancia)` → diferença efetiva
-- `detectarInconsistencias(registro, jornada)` → lista de strings (`"Falta saída_1"`, `"Intervalo abaixo do mínimo"`, etc.)
-
-Regras CLT respeitadas: tolerância diária máx 10min, intervalo mínimo 1h para jornadas > 6h, adicional 50% dia útil / 100% domingo+feriado.
-
----
-
-### 3. Admin — `AdminPontoEletronico.tsx` (novas abas)
-
-Adicionar abas a UI já existente:
-- **Jornadas** — CRUD de tipos de jornada e vinculação CPF↔jornada com vigência
-- **Configurações** — formulário do `config_horas_extras`
-- **Banco de Horas** — visualização por funcionário (saldo, histórico, movimentos prestes a expirar), botão para lançar compensação manual
-- **Auditoria** — listagem read-only de `registros_ponto_auditoria` com filtros por CPF/data
-- **Dashboard** (nova primeira aba) — cards com totais do mês: nº funcionários com inconsistências, total horas extras, faltas, solicitações pendentes; tabela top 10 saldos negativos e top 10 banco positivo
-
-Aba existente "Espelho" passa a mostrar colunas calculadas: Esperado / Trabalhado / Extras / Saldo dia, com cores (verde/vermelho/amarelo).
-
----
-
-### 4. Portal funcionário — `PortalPonto` em `MinhaArea.tsx`
-
-- **Cabeçalho dashboard**: 4 cards (Horas trabalhadas mês, Horas esperadas mês, Saldo banco de horas, Solicitações pendentes)
-- **Tabela espelho** ganha colunas: Esperado / Trabalhado / Saldo dia / Status (badge verde/amarelo/vermelho)
-- **Banco de horas**: nova seção com saldo total + lista de últimos 30 movimentos
-- **Geolocalização opcional** no diálogo de ajuste manual: checkbox "Anexar minha localização" → captura `navigator.geolocation` e envia em `solicitacoes_ponto.motivo` (campo extra serializado, igual ao `__PONTO_ANEXO__` já usado)
-- **Notificações in-app** (badge): card de alerta quando dia anterior não tem batidas completas
-
----
-
-### 5. Aprovação com auditoria (Admin)
-
-Ao aprovar/rejeitar:
-- Inserir registro em `registros_ponto_auditoria` com `solicitacao_id`, valor anterior, valor novo, admin atual, motivo da solicitação
-- Para rejeição: tornar campo `observacao_admin` (já existe) **obrigatório** no diálogo
-- Após aprovar atestado/ajuste, recalcular jornada do dia e gravar movimento em `banco_horas_movimentos` se gerar saldo
-
----
-
-### 6. Relatórios e exportação
-
-Nova aba **Relatórios** em Admin:
-- **Espelho de ponto PDF** (jsPDF + autoTable): cabeçalho com nome/CPF/cargo/unidade, tabela diária do mês, totalizadores, assinaturas
-- **Excel (xlsx)** via SheetJS: planilha por funcionário ou consolidada
-- Filtros: período, unidade, departamento, funcionário
-- No Portal, botão "Exportar meu espelho" gera o PDF do funcionário logado
-
----
-
-### 7. Correção dos build errors atuais (bloqueio imediato)
-
-- `AdminPontoEletronico.tsx:857,860` — tipar `payload` como `Database["public"]["Tables"]["registros_ponto"]["Insert"]` em vez de `Record<string, unknown>`
-- `vite.config.ts:23-24` — tipar parâmetros: `(server: ViteDevServer)` e `(req: IncomingMessage, res: ServerResponse, next)`
-- 3 edge functions (`login-beneficiario`, `parse-pdf`, `send-2fa-email`) — trocar `error.message` por `error instanceof Error ? error.message : String(error)` no catch
-
----
-
-## Ordem de implementação (após aprovação)
-
-1. **Hotfix** dos build errors (bloqueia tudo)
-2. Migrations (jornadas, config, banco horas, auditoria, geo, trigger)
-3. `src/lib/pontoCalculos.ts` + testes
-4. Admin: abas Jornadas, Configurações, Auditoria
-5. Recalcular jornada/banco no fluxo de aprovação existente
-6. Portal: dashboard + colunas calculadas + banco de horas + geolocalização
-7. Admin: aba Banco de Horas + Dashboard
-8. Relatórios PDF/Excel + botão de exportação Portal
-9. Notificações in-app de batida ausente
-
-## Detalhes técnicos resumidos
-
-- Stack: React + Tailwind + shadcn (já em uso), TanStack Query, Supabase
-- Edge functions: nenhuma nova necessária (cálculo no cliente; auditoria via trigger no DB)
-- Bibliotecas a instalar: `jspdf`, `jspdf-autotable`, `xlsx`
-- Sem mudança em `client.ts`/`types.ts` (regenerados auto pelas migrations)
-- Backward-compatible: registros antigos sem jornada vinculada caem em jornada 8h padrão
+Sem nova migration, sem nova edge function, sem dependências novas.
 
