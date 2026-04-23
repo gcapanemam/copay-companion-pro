@@ -1752,6 +1752,10 @@ export function AdminPontoEletronico() {
                 </div>
               )}
             </TabsContent>
+
+            <TabsContent value="jornadas" className="space-y-4">
+              <AdminJornadas />
+            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
