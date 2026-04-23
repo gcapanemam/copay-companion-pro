@@ -835,7 +835,7 @@ export function AdminPontoEletronico() {
 
     const baseMotivo = String(s.motivo || "").trim();
     const motivo = best?.motivo ? `${best.motivo}\nAjuste aprovado: ${baseMotivo}` : `Ajuste aprovado: ${baseMotivo}`;
-    const payload = {
+    const payload: Database["public"]["Tables"]["registros_ponto"]["Insert"] = {
       cpf: best?.cpf || cpfNorm,
       data: dia,
       entrada_1: best?.entrada_1 ?? null,
@@ -851,7 +851,7 @@ export function AdminPontoEletronico() {
       ocorrencia: "Ajuste aprovado",
       motivo,
       [campo]: valor,
-    } as unknown as Record<string, unknown>;
+    };
 
     if (best?.id) {
       const { error: updErr } = await supabase.from("registros_ponto").update(payload).eq("id", best.id);

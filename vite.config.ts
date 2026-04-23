@@ -1,8 +1,8 @@
-import { defineConfig } from "vite";
+import { defineConfig, type ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
-import { request as httpRequest } from "node:http";
+import { request as httpRequest, type IncomingMessage, type ServerResponse } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { constants as cryptoConstants } from "node:crypto";
 
@@ -20,8 +20,8 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     {
       name: "controlid-local-proxy",
-      configureServer(server) {
-        server.middlewares.use("/controlid-proxy", async (req, res) => {
+      configureServer(server: ViteDevServer) {
+        server.middlewares.use("/controlid-proxy", async (req: IncomingMessage, res: ServerResponse) => {
           try {
             if (req.method === "OPTIONS") {
               res.statusCode = 204;
