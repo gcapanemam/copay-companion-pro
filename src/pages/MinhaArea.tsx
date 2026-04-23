@@ -950,7 +950,18 @@ function PortalPonto({ cpf }: { cpf: string }) {
                         <TableCell className={r && r.saida_3 && !r.entrada_3 ? "text-destructive font-medium" : undefined}>
                           {r ? r.saida_3?.slice(0, 5) || "—" : "—"}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">{r ? formatMinutes(total) : "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap">{r ? minutosParaHHMM(calc?.trabalhadas_min ?? total ?? 0) : "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">{calc ? minutosParaHHMM(calc.esperadas_min) : "—"}</TableCell>
+                        <TableCell className={`whitespace-nowrap font-medium ${calc && calc.saldo_min < 0 ? "text-destructive" : calc && calc.saldo_min > 0 ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
+                          {calc ? minutosParaHHMM(calc.saldo_min) : "—"}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {calc ? (
+                            <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-medium ${corStatus(calc.status)}`}>
+                              {labelStatus(calc.status)}
+                            </span>
+                          ) : "—"}
+                        </TableCell>
                         <TableCell className="whitespace-nowrap">{r?.nsr ?? "—"}</TableCell>
                         <TableCell className="text-right">
                           <Button
