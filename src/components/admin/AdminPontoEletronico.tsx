@@ -479,6 +479,24 @@ export function AdminPontoEletronico() {
   const [solicitacoesEnabled, setSolicitacoesEnabled] = useState(true);
   const [solicitacoesMode, setSolicitacoesMode] = useState<"remote" | "local">("remote");
 
+  // Importação manual de AFD (arquivo .txt Portaria 671)
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importPreview, setImportPreview] = useState<{
+    fileName: string;
+    afdText: string;
+    empresa: string | null;
+    cnpj: string | null;
+    totalLinhas: number;
+    totalMarcacoes: number;
+    nsrMin: number | null;
+    nsrMax: number | null;
+    periodoInicio: string | null;
+    periodoFim: string | null;
+    equipamentoId: string;
+  } | null>(null);
+
   const { data: equipamentos = [], isLoading: loadingEquip } = useQuery({
     queryKey: ["equipamentos_ponto"],
     queryFn: async () => {
