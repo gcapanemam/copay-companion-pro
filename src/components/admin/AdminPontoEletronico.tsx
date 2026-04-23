@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Database } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,10 +9,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Plus, RefreshCw, Pencil, Wifi, WifiOff, Clock, Search } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Pencil, Wifi, WifiOff, Clock, Search, FileUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EquipamentoPontoDialog } from "./EquipamentoPontoDialog";
 import { AdminJornadas } from "./AdminJornadas";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Equipamento = Database["public"]["Tables"]["equipamentos_ponto"]["Row"];
 type RegistroPonto = Database["public"]["Tables"]["registros_ponto"]["Row"];
@@ -470,6 +478,24 @@ export function AdminPontoEletronico() {
   const [solLocalVersion, setSolLocalVersion] = useState(0);
   const [solicitacoesEnabled, setSolicitacoesEnabled] = useState(true);
   const [solicitacoesMode, setSolicitacoesMode] = useState<"remote" | "local">("remote");
+
+  // Importação manual de AFD (arquivo .txt Portaria 671)
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importPreview, setImportPreview] = useState<{
+    fileName: string;
+    afdText: string;
+    empresa: string | null;
+    cnpj: string | null;
+    totalLinhas: number;
+    totalMarcacoes: number;
+    nsrMin: number | null;
+    nsrMax: number | null;
+    periodoInicio: string | null;
+    periodoFim: string | null;
+    equipamentoId: string;
+  } | null>(null);
 
   const { data: equipamentos = [], isLoading: loadingEquip } = useQuery({
     queryKey: ["equipamentos_ponto"],
@@ -1251,14 +1277,224 @@ export function AdminPontoEletronico() {
     }
   };
 
+  // ===== Importação manual de AFD (arquivo .txt Portaria 671 / REP-C) =====
+  const parseAfdHeader = (afdText: string): { empresa: string | null; cnpj: string | null } => {
+    // Linha tipo "1" do AFD Portaria 671 contém: NSR(9) + tipo(1) + ... + CNPJ/CPF(14) + razão social
+    const firstLine = afdText.split(/\r?\n/).find((l) => l.trim().length > 0) || "";
+    const m = firstLine.match(/^(\d{9})1(.+)$/);
+    if (!m) return { empresa: null, cnpj: null };
+    const body = m[2] || "";
+    const cnpjMatch = body.match(/(\d{14})/);
+    const cnpj = cnpjMatch ? cnpjMatch[1] : null;
+    // Razão social: tudo após o CNPJ/CPF (até 150 chars geralmente)
+    let empresa: string | null = null;
+    if (cnpj) {
+      const after = body.slice((cnpjMatch?.index ?? 0) + cnpj.length).trim();
+      empresa = after ? after.replace(/\s+/g, " ").slice(0, 80) : null;
+    }
+    return { empresa, cnpj };
+  };
+
+  const handleAfdFileChosen = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    try {
+      const file = files[0];
+      const afdText = await file.text();
+      if (!afdText.trim()) {
+        toast({ title: "Arquivo vazio", variant: "destructive" });
+        return;
+      }
+      const lines = afdText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      const parsed = parseAfd(afdText);
+      if (parsed.length === 0) {
+        toast({
+          title: "Arquivo não reconhecido",
+          description: "Nenhuma marcação tipo 3 encontrada no formato Portaria 671.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const { empresa, cnpj } = parseAfdHeader(afdText);
+      const nsrs = parsed.map((p) => p.nsr).filter((n) => Number.isFinite(n));
+      const dates = parsed.map((p) => p.date).filter(Boolean).sort();
+      setImportPreview({
+        fileName: file.name,
+        afdText,
+        empresa,
+        cnpj,
+        totalLinhas: lines.length,
+        totalMarcacoes: parsed.length,
+        nsrMin: nsrs.length ? Math.min(...nsrs) : null,
+        nsrMax: nsrs.length ? Math.max(...nsrs) : null,
+        periodoInicio: dates[0] || null,
+        periodoFim: dates[dates.length - 1] || null,
+        equipamentoId: "__none__",
+      });
+      setImportDialogOpen(true);
+    } catch (err: unknown) {
+      toast({
+        title: "Falha ao ler arquivo",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const confirmManualImport = async () => {
+    if (!importPreview) return;
+    setImporting(true);
+    try {
+      const { afdText, equipamentoId, fileName } = importPreview;
+      const equipIdParaSalvar = equipamentoId === "__none__" ? null : equipamentoId;
+
+      // Mapeamento PIS->CPF a partir do próprio AFD (caso existam linhas com indicador I/A)
+      const afdPisToCpf = new Map<string, string>();
+      for (const line of afdText.split(/\r?\n/)) {
+        const t = String(line || "").trim();
+        if (!t) continue;
+        const pisMatch = t.match(/[IA](\d{12})/);
+        if (!pisMatch) continue;
+        const pis = pisMatch[1];
+        const start = (pisMatch.index ?? 0) + pisMatch[0].length;
+        const tailDigits = t.slice(start).replace(/\D/g, "");
+        const cpfCandidate = normalizeCpf(tailDigits.slice(-11));
+        if (pis && cpfCandidate) {
+          afdPisToCpf.set(pis, cpfCandidate);
+          if (pis.startsWith("0")) afdPisToCpf.set(pis.slice(1), cpfCandidate);
+        }
+      }
+
+      const { data: admissoes } = await supabase.from("admissoes").select("cpf, numero_pis");
+      const cpfsValidos = new Set<string>();
+      const pisToCpf = new Map<string, string>();
+      (admissoes as AdmissaoRow[] | null || []).forEach((a) => {
+        const c = normalizeCpf(a.cpf);
+        if (c) cpfsValidos.add(c);
+        const pis = String(a.numero_pis ?? "").replace(/\D/g, "");
+        if (pis && c) pisToCpf.set(pis, c);
+      });
+      const cpfSuffix9ToCpf = new Map<string, string | null>();
+      for (const cpf of cpfsValidos) {
+        const suffix9 = cpf.slice(-9);
+        const existing = cpfSuffix9ToCpf.get(suffix9);
+        if (existing && existing !== cpf) cpfSuffix9ToCpf.set(suffix9, null);
+        else if (existing === undefined) cpfSuffix9ToCpf.set(suffix9, cpf);
+      }
+
+      const parsed = parseAfd(afdText);
+      const marks: AfdMark[] = [];
+      let cpfsNaoEncontrados = 0;
+      for (const p of parsed) {
+        const resolved = resolveCpfFromRest(p.rest, cpfsValidos, pisToCpf, afdPisToCpf, cpfSuffix9ToCpf);
+        if (!resolved) {
+          cpfsNaoEncontrados++;
+          continue;
+        }
+        marks.push({ nsr: p.nsr, dt: p.dt, cpf: resolved.cpf, date: p.date, time: p.time });
+      }
+
+      if (marks.length === 0) {
+        toast({
+          title: "Nenhuma marcação aproveitada",
+          description: `${parsed.length} linha(s) lida(s) • ${cpfsNaoEncontrados} CPF(s) não mapeado(s) em admissões.`,
+          variant: "destructive",
+        });
+        setImporting(false);
+        return;
+      }
+
+      // Carrega registros existentes no período/CPFs para mesclar com merge cronológico
+      const existingByKey = new Map<string, RegistroPonto>();
+      const cpfs = Array.from(new Set(marks.map((m) => m.cpf)));
+      const dates = marks.map((m) => m.date).filter(Boolean).sort();
+      const minDate = dates[0] || "";
+      const maxDate = dates[dates.length - 1] || "";
+      for (let i = 0; i < cpfs.length; i += 200) {
+        const chunk = cpfs.slice(i, i + 200);
+        let q = supabase.from("registros_ponto").select("*").in("cpf", chunk);
+        if (minDate) q = q.gte("data", minDate);
+        if (maxDate) q = q.lte("data", maxDate);
+        const { data, error } = await q;
+        if (error) throw error;
+        (data as RegistroPonto[] | null || []).forEach((r) => {
+          const cpf = normalizeCpf(r.cpf || "");
+          const dataIso = String(r.data || "").slice(0, 10);
+          if (!cpf || !dataIso) return;
+          existingByKey.set(`${cpf}__${dataIso}`, r);
+        });
+      }
+
+      const { records, marcacoesExcedentes } = groupMarksIntoDailyRecords(
+        marks,
+        equipIdParaSalvar || "",
+        existingByKey,
+      );
+
+      // Se não vinculado a equipamento, limpa o id no payload
+      const payload = equipIdParaSalvar
+        ? records
+        : records.map((r) => ({ ...r, equipamento_id: null }));
+
+      for (let i = 0; i < payload.length; i += 200) {
+        const batch = payload.slice(i, i + 200);
+        const { error } = await supabase
+          .from("registros_ponto")
+          .upsert(batch, { onConflict: "cpf,data" });
+        if (error) throw error;
+      }
+
+      // Importação manual NÃO atualiza ultimo_nsr (evita travar sync incremental futuro)
+
+      const partes = [
+        `${records.length} dia(s) importado(s)`,
+        `${marks.length} marcação(ões)`,
+      ];
+      if (cpfsNaoEncontrados) partes.push(`${cpfsNaoEncontrados} não mapeada(s)`);
+      if (marcacoesExcedentes) partes.push(`${marcacoesExcedentes} excedente(s) (>6 batidas/dia)`);
+      toast({
+        title: `AFD importado: ${fileName}`,
+        description: partes.join(" • "),
+      });
+      qc.invalidateQueries({ queryKey: ["registros_ponto"] });
+      setImportDialogOpen(false);
+      setImportPreview(null);
+    } catch (err: unknown) {
+      toast({
+        title: "Falha ao importar AFD",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".txt,text/plain"
+        hidden
+        onChange={(e) => handleAfdFileChosen(e.target.files)}
+      />
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <h2 className="text-xl sm:text-2xl font-bold text-foreground">Ponto Eletrônico</h2>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => handleSync(null)} disabled={syncingId !== null || ativos.length === 0}>
             {syncingId === "all" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
             Sincronizar Todos
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing || syncingId !== null}
+            title="Importar arquivo AFD (.txt) Portaria 671"
+          >
+            <FileUp className="h-4 w-4 mr-1" />
+            Importar AFD (arquivo)
           </Button>
           <Button onClick={() => { setEditing(null); setDialogOpen(true); }}>
             <Plus className="h-4 w-4 mr-1" />
@@ -1791,6 +2027,99 @@ export function AdminPontoEletronico() {
         equipamento={editing}
         onSaved={() => qc.invalidateQueries({ queryKey: ["equipamentos_ponto"] })}
       />
+
+      <Dialog
+        open={importDialogOpen}
+        onOpenChange={(o) => {
+          if (importing) return;
+          setImportDialogOpen(o);
+          if (!o) setImportPreview(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Pré-visualização do AFD</DialogTitle>
+            <DialogDescription>
+              Confirme os dados do arquivo antes de importar para o banco.
+            </DialogDescription>
+          </DialogHeader>
+          {importPreview && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="text-muted-foreground">Arquivo</div>
+                <div className="col-span-2 font-mono text-xs break-all">{importPreview.fileName}</div>
+
+                <div className="text-muted-foreground">Empresa</div>
+                <div className="col-span-2">{importPreview.empresa || "—"}</div>
+
+                <div className="text-muted-foreground">CNPJ/CPF</div>
+                <div className="col-span-2 font-mono">{importPreview.cnpj || "—"}</div>
+
+                <div className="text-muted-foreground">Linhas</div>
+                <div className="col-span-2">{importPreview.totalLinhas}</div>
+
+                <div className="text-muted-foreground">Marcações (tipo 3)</div>
+                <div className="col-span-2 font-medium">{importPreview.totalMarcacoes}</div>
+
+                <div className="text-muted-foreground">Período</div>
+                <div className="col-span-2">
+                  {importPreview.periodoInicio ? formatDate(importPreview.periodoInicio) : "—"}
+                  {" → "}
+                  {importPreview.periodoFim ? formatDate(importPreview.periodoFim) : "—"}
+                </div>
+
+                <div className="text-muted-foreground">NSR</div>
+                <div className="col-span-2">
+                  {importPreview.nsrMin ?? "—"} a {importPreview.nsrMax ?? "—"}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="text-muted-foreground text-xs">Vincular ao equipamento (opcional)</div>
+                <Select
+                  value={importPreview.equipamentoId}
+                  onValueChange={(v) =>
+                    setImportPreview((prev) => (prev ? { ...prev, equipamentoId: v } : prev))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sem vínculo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sem vínculo</SelectItem>
+                    {equipamentos.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                A importação manual mescla com registros existentes (cpf+data) e <strong>não</strong> altera o
+                cursor de sincronização do equipamento.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setImportDialogOpen(false);
+                setImportPreview(null);
+              }}
+              disabled={importing}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={confirmManualImport} disabled={importing || !importPreview}>
+              {importing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileUp className="h-4 w-4 mr-1" />}
+              Confirmar importação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
