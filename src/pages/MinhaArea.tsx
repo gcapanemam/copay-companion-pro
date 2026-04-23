@@ -919,6 +919,7 @@ function PortalPonto({ cpf }: { cpf: string }) {
                         Boolean(r.entrada_2) !== Boolean(r.saida_2) ||
                         Boolean(r.entrada_3) !== Boolean(r.saida_3));
                     const total = r ? sumWorkedMinutes(r) : null;
+                    const calc = r ? calculosByDia.get(dia) : null;
                     return (
                       <TableRow key={dia} className={pairMissing ? "bg-destructive/5" : undefined}>
                         <TableCell className="whitespace-nowrap">
