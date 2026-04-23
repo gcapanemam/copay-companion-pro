@@ -453,7 +453,7 @@ export function AdminPontoEletronico() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Equipamento | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
-  const [tabRegistros, setTabRegistros] = useState<"lista" | "calendario" | "solicitacoes">("lista");
+  const [tabRegistros, setTabRegistros] = useState<"lista" | "calendario" | "solicitacoes" | "jornadas">("lista");
   const [filtroEquipamento, setFiltroEquipamento] = useState<string>("__all__");
   const [busca, setBusca] = useState<string>("");
   const [dataDe, setDataDe] = useState<string>("");
@@ -1339,11 +1339,12 @@ export function AdminPontoEletronico() {
           <CardTitle className="text-lg">Ponto</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs value={tabRegistros} onValueChange={(v) => setTabRegistros(v as "lista" | "calendario" | "solicitacoes")}>
+          <Tabs value={tabRegistros} onValueChange={(v) => setTabRegistros(v as "lista" | "calendario" | "solicitacoes" | "jornadas")}>
             <TabsList>
               <TabsTrigger value="lista">Lista</TabsTrigger>
               <TabsTrigger value="calendario">Calendário</TabsTrigger>
               <TabsTrigger value="solicitacoes">Solicitações de ajuste</TabsTrigger>
+              <TabsTrigger value="jornadas">Jornadas</TabsTrigger>
             </TabsList>
 
             <TabsContent value="lista" className="space-y-4">
