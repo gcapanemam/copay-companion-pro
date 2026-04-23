@@ -29,6 +29,7 @@ import {
   SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton,
   SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
+import { calcularJornadaDia, calcularBancoHoras, JORNADA_PADRAO, minutosParaHHMM, corStatus, labelStatus, type JornadaLike, type CalculoDia } from "@/lib/pontoCalculos";
 
 const BadgeCount = ({ count }: { count: number }) => {
   if (count <= 0) return null;
