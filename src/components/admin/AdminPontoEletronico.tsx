@@ -1487,6 +1487,15 @@ export function AdminPontoEletronico() {
             {syncingId === "all" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
             Sincronizar Todos
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing || syncingId !== null}
+            title="Importar arquivo AFD (.txt) Portaria 671"
+          >
+            <FileUp className="h-4 w-4 mr-1" />
+            Importar AFD (arquivo)
+          </Button>
           <Button onClick={() => { setEditing(null); setDialogOpen(true); }}>
             <Plus className="h-4 w-4 mr-1" />
             Novo Equipamento
@@ -2018,6 +2027,99 @@ export function AdminPontoEletronico() {
         equipamento={editing}
         onSaved={() => qc.invalidateQueries({ queryKey: ["equipamentos_ponto"] })}
       />
+
+      <Dialog
+        open={importDialogOpen}
+        onOpenChange={(o) => {
+          if (importing) return;
+          setImportDialogOpen(o);
+          if (!o) setImportPreview(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Pré-visualização do AFD</DialogTitle>
+            <DialogDescription>
+              Confirme os dados do arquivo antes de importar para o banco.
+            </DialogDescription>
+          </DialogHeader>
+          {importPreview && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="text-muted-foreground">Arquivo</div>
+                <div className="col-span-2 font-mono text-xs break-all">{importPreview.fileName}</div>
+
+                <div className="text-muted-foreground">Empresa</div>
+                <div className="col-span-2">{importPreview.empresa || "—"}</div>
+
+                <div className="text-muted-foreground">CNPJ/CPF</div>
+                <div className="col-span-2 font-mono">{importPreview.cnpj || "—"}</div>
+
+                <div className="text-muted-foreground">Linhas</div>
+                <div className="col-span-2">{importPreview.totalLinhas}</div>
+
+                <div className="text-muted-foreground">Marcações (tipo 3)</div>
+                <div className="col-span-2 font-medium">{importPreview.totalMarcacoes}</div>
+
+                <div className="text-muted-foreground">Período</div>
+                <div className="col-span-2">
+                  {importPreview.periodoInicio ? formatDate(importPreview.periodoInicio) : "—"}
+                  {" → "}
+                  {importPreview.periodoFim ? formatDate(importPreview.periodoFim) : "—"}
+                </div>
+
+                <div className="text-muted-foreground">NSR</div>
+                <div className="col-span-2">
+                  {importPreview.nsrMin ?? "—"} a {importPreview.nsrMax ?? "—"}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="text-muted-foreground text-xs">Vincular ao equipamento (opcional)</div>
+                <Select
+                  value={importPreview.equipamentoId}
+                  onValueChange={(v) =>
+                    setImportPreview((prev) => (prev ? { ...prev, equipamentoId: v } : prev))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sem vínculo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sem vínculo</SelectItem>
+                    {equipamentos.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                A importação manual mescla com registros existentes (cpf+data) e <strong>não</strong> altera o
+                cursor de sincronização do equipamento.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setImportDialogOpen(false);
+                setImportPreview(null);
+              }}
+              disabled={importing}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={confirmManualImport} disabled={importing || !importPreview}>
+              {importing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileUp className="h-4 w-4 mr-1" />}
+              Confirmar importação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
