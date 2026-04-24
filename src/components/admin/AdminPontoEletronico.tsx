@@ -497,6 +497,125 @@ export function AdminPontoEletronico() {
     equipamentoId: string;
   } | null>(null);
 
+  // ===== iDCloud (sincronização via MySQL na nuvem da ControlID) =====
+  const [idcloudOpen, setIdcloudOpen] = useState(false);
+  const [idcloudBusy, setIdcloudBusy] = useState<null | "probe" | "pull" | "push" | "afd">(null);
+  const [idcloudIdEmpregador, setIdcloudIdEmpregador] = useState<string>(() => localStorage.getItem("copay.idcloud.id_empregador") || "");
+  const [idcloudEquipLocal, setIdcloudEquipLocal] = useState<string>(() => localStorage.getItem("copay.idcloud.equip_id") || "__none__");
+  const [idcloudProbe, setIdcloudProbe] = useState<{
+    empregadores?: Array<{ id: number; RazaoSocial: string | null; CNPJ: string | null }>;
+    equipamentos?: Array<{ id: number; NumeroSerie: string | null; Descricao: string | null; id_Empregador: number; RazaoSocial: string | null }>;
+    stats?: Array<{ id_Empregador: number; RazaoSocial: string | null; total_afd: number; max_nsr: number | null; ultima_data: string | null }>;
+    error?: string;
+  } | null>(null);
+
+  const persistIdcloud = (idEmp: string, equipId: string) => {
+    if (idEmp) localStorage.setItem("copay.idcloud.id_empregador", idEmp);
+    localStorage.setItem("copay.idcloud.equip_id", equipId);
+  };
+
+  const handleIdcloudProbe = async () => {
+    setIdcloudBusy("probe");
+    setIdcloudProbe(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("idcloud-probe", { body: {} });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Falha no diagnóstico");
+      setIdcloudProbe(data);
+      toast({ title: "iDCloud conectado", description: `${(data.empregadores || []).length} empregadores visíveis` });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setIdcloudProbe({ error: msg });
+      toast({ title: "Falha ao conectar no iDCloud", description: msg, variant: "destructive" });
+    } finally {
+      setIdcloudBusy(null);
+    }
+  };
+
+  const handleIdcloudPullPessoas = async () => {
+    const idEmp = Number(idcloudIdEmpregador);
+    if (!idEmp) {
+      toast({ title: "Escolha o empregador", description: "Rode o diagnóstico e selecione a empresa.", variant: "destructive" });
+      return;
+    }
+    setIdcloudBusy("pull");
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-idcloud-pessoas", {
+        body: { action: "pull", id_empregador: idEmp },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Falha");
+      toast({
+        title: "Funcionários importados do iDCloud",
+        description: `Total: ${data.total} • Inseridos: ${data.inseridos} • Atualizados: ${data.atualizados} • Pulados: ${data.pulados}`,
+      });
+      qc.invalidateQueries({ queryKey: ["admissoes_mini_ponto"] });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast({ title: "Falha ao importar funcionários", description: msg, variant: "destructive" });
+    } finally {
+      setIdcloudBusy(null);
+    }
+  };
+
+  const handleIdcloudPushPessoas = async () => {
+    const idEmp = Number(idcloudIdEmpregador);
+    if (!idEmp) {
+      toast({ title: "Escolha o empregador", description: "Rode o diagnóstico e selecione a empresa.", variant: "destructive" });
+      return;
+    }
+    setIdcloudBusy("push");
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-idcloud-pessoas", {
+        body: { action: "push", id_empregador: idEmp },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Falha");
+      toast({
+        title: "Funcionários enviados ao iDCloud",
+        description: `Total: ${data.total} • Inseridos: ${data.inseridos} • Atualizados: ${data.atualizados} • Erros: ${data.erros}`,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast({ title: "Falha ao enviar funcionários", description: msg, variant: "destructive" });
+    } finally {
+      setIdcloudBusy(null);
+    }
+  };
+
+  const handleIdcloudSyncAfd = async () => {
+    const idEmp = Number(idcloudIdEmpregador);
+    if (!idEmp) {
+      toast({ title: "Escolha o empregador", description: "Rode o diagnóstico e selecione a empresa.", variant: "destructive" });
+      return;
+    }
+    const equipLocal = idcloudEquipLocal && idcloudEquipLocal !== "__none__" ? idcloudEquipLocal : null;
+    const equip = equipLocal ? equipamentos.find((e) => e.id === equipLocal) : null;
+    setIdcloudBusy("afd");
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-idcloud-afd", {
+        body: {
+          id_empregador: idEmp,
+          equipamento_id: equipLocal,
+          numero_serie: equip?.numero_serie || null,
+        },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || "Falha");
+      toast({
+        title: "AFD sincronizado do iDCloud",
+        description: `Lidas: ${data.lidas} • Importadas: ${data.importadas} • CPFs não resolvidos: ${data.cpfs_nao_resolvidos} • NSR ${data.cursor_anterior}→${data.cursor_novo}`,
+      });
+      qc.invalidateQueries({ queryKey: ["registros_ponto"] });
+      qc.invalidateQueries({ queryKey: ["equipamentos_ponto"] });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast({ title: "Falha ao sincronizar AFD", description: msg, variant: "destructive" });
+    } finally {
+      setIdcloudBusy(null);
+    }
+  };
+
   const { data: equipamentos = [], isLoading: loadingEquip } = useQuery({
     queryKey: ["equipamentos_ponto"],
     queryFn: async () => {
