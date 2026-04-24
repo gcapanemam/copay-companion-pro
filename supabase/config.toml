@@ -1,1 +1,10 @@
 project_id = "koamnywzevllkhpsbvye"
+
+[functions.idcloud-probe]
+verify_jwt = false
+
+[functions.sync-idcloud-afd]
+verify_jwt = false
+
+[functions.sync-idcloud-pessoas]
+verify_jwt = false
