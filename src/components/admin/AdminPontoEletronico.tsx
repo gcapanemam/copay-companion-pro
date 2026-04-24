@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Plus, RefreshCw, Pencil, Wifi, WifiOff, Clock, Search, FileUp, Cloud, CloudDownload } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Pencil, Wifi, WifiOff, Clock, Search, FileUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EquipamentoPontoDialog } from "./EquipamentoPontoDialog";
 import { AdminJornadas } from "./AdminJornadas";
@@ -496,125 +496,6 @@ export function AdminPontoEletronico() {
     periodoFim: string | null;
     equipamentoId: string;
   } | null>(null);
-
-  // ===== iDCloud (sincronização via MySQL na nuvem da ControlID) =====
-  const [idcloudOpen, setIdcloudOpen] = useState(false);
-  const [idcloudBusy, setIdcloudBusy] = useState<null | "probe" | "pull" | "push" | "afd">(null);
-  const [idcloudIdEmpregador, setIdcloudIdEmpregador] = useState<string>(() => localStorage.getItem("copay.idcloud.id_empregador") || "");
-  const [idcloudEquipLocal, setIdcloudEquipLocal] = useState<string>(() => localStorage.getItem("copay.idcloud.equip_id") || "__none__");
-  const [idcloudProbe, setIdcloudProbe] = useState<{
-    empregadores?: Array<{ id: number; RazaoSocial: string | null; CNPJ: string | null }>;
-    equipamentos?: Array<{ id: number; NumeroSerie: string | null; Descricao: string | null; id_Empregador: number; RazaoSocial: string | null }>;
-    stats?: Array<{ id_Empregador: number; RazaoSocial: string | null; total_afd: number; max_nsr: number | null; ultima_data: string | null }>;
-    error?: string;
-  } | null>(null);
-
-  const persistIdcloud = (idEmp: string, equipId: string) => {
-    if (idEmp) localStorage.setItem("copay.idcloud.id_empregador", idEmp);
-    localStorage.setItem("copay.idcloud.equip_id", equipId);
-  };
-
-  const handleIdcloudProbe = async () => {
-    setIdcloudBusy("probe");
-    setIdcloudProbe(null);
-    try {
-      const { data, error } = await supabase.functions.invoke("idcloud-probe", { body: {} });
-      if (error) throw error;
-      if (!data?.ok) throw new Error(data?.error || "Falha no diagnóstico");
-      setIdcloudProbe(data);
-      toast({ title: "iDCloud conectado", description: `${(data.empregadores || []).length} empregadores visíveis` });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setIdcloudProbe({ error: msg });
-      toast({ title: "Falha ao conectar no iDCloud", description: msg, variant: "destructive" });
-    } finally {
-      setIdcloudBusy(null);
-    }
-  };
-
-  const handleIdcloudPullPessoas = async () => {
-    const idEmp = Number(idcloudIdEmpregador);
-    if (!idEmp) {
-      toast({ title: "Escolha o empregador", description: "Rode o diagnóstico e selecione a empresa.", variant: "destructive" });
-      return;
-    }
-    setIdcloudBusy("pull");
-    try {
-      const { data, error } = await supabase.functions.invoke("sync-idcloud-pessoas", {
-        body: { action: "pull", id_empregador: idEmp },
-      });
-      if (error) throw error;
-      if (!data?.ok) throw new Error(data?.error || "Falha");
-      toast({
-        title: "Funcionários importados do iDCloud",
-        description: `Total: ${data.total} • Inseridos: ${data.inseridos} • Atualizados: ${data.atualizados} • Pulados: ${data.pulados}`,
-      });
-      qc.invalidateQueries({ queryKey: ["admissoes_mini_ponto"] });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast({ title: "Falha ao importar funcionários", description: msg, variant: "destructive" });
-    } finally {
-      setIdcloudBusy(null);
-    }
-  };
-
-  const handleIdcloudPushPessoas = async () => {
-    const idEmp = Number(idcloudIdEmpregador);
-    if (!idEmp) {
-      toast({ title: "Escolha o empregador", description: "Rode o diagnóstico e selecione a empresa.", variant: "destructive" });
-      return;
-    }
-    setIdcloudBusy("push");
-    try {
-      const { data, error } = await supabase.functions.invoke("sync-idcloud-pessoas", {
-        body: { action: "push", id_empregador: idEmp },
-      });
-      if (error) throw error;
-      if (!data?.ok) throw new Error(data?.error || "Falha");
-      toast({
-        title: "Funcionários enviados ao iDCloud",
-        description: `Total: ${data.total} • Inseridos: ${data.inseridos} • Atualizados: ${data.atualizados} • Erros: ${data.erros}`,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast({ title: "Falha ao enviar funcionários", description: msg, variant: "destructive" });
-    } finally {
-      setIdcloudBusy(null);
-    }
-  };
-
-  const handleIdcloudSyncAfd = async () => {
-    const idEmp = Number(idcloudIdEmpregador);
-    if (!idEmp) {
-      toast({ title: "Escolha o empregador", description: "Rode o diagnóstico e selecione a empresa.", variant: "destructive" });
-      return;
-    }
-    const equipLocal = idcloudEquipLocal && idcloudEquipLocal !== "__none__" ? idcloudEquipLocal : null;
-    const equip = equipLocal ? equipamentos.find((e) => e.id === equipLocal) : null;
-    setIdcloudBusy("afd");
-    try {
-      const { data, error } = await supabase.functions.invoke("sync-idcloud-afd", {
-        body: {
-          id_empregador: idEmp,
-          equipamento_id: equipLocal,
-          numero_serie: equip?.numero_serie || null,
-        },
-      });
-      if (error) throw error;
-      if (!data?.ok) throw new Error(data?.error || "Falha");
-      toast({
-        title: "AFD sincronizado do iDCloud",
-        description: `Lidas: ${data.lidas} • Importadas: ${data.importadas} • CPFs não resolvidos: ${data.cpfs_nao_resolvidos} • NSR ${data.cursor_anterior}→${data.cursor_novo}`,
-      });
-      qc.invalidateQueries({ queryKey: ["registros_ponto"] });
-      qc.invalidateQueries({ queryKey: ["equipamentos_ponto"] });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast({ title: "Falha ao sincronizar AFD", description: msg, variant: "destructive" });
-    } finally {
-      setIdcloudBusy(null);
-    }
-  };
 
   const { data: equipamentos = [], isLoading: loadingEquip } = useQuery({
     queryKey: ["equipamentos_ponto"],
@@ -1624,14 +1505,6 @@ export function AdminPontoEletronico() {
             <FileUp className="h-4 w-4 mr-1" />
             Importar AFD (arquivo)
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => setIdcloudOpen(true)}
-            title="Sincronizar com iDCloud (nuvem ControlID)"
-          >
-            <Cloud className="h-4 w-4 mr-1" />
-            iDCloud (Nuvem)
-          </Button>
           <Button onClick={() => { setEditing(null); setDialogOpen(true); }}>
             <Plus className="h-4 w-4 mr-1" />
             Novo Equipamento
@@ -2252,109 +2125,6 @@ export function AdminPontoEletronico() {
             <Button onClick={confirmManualImport} disabled={importing || !importPreview}>
               {importing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileUp className="h-4 w-4 mr-1" />}
               Confirmar importação
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ===== iDCloud (Nuvem ControlID) ===== */}
-      <Dialog open={idcloudOpen} onOpenChange={(o) => { if (!idcloudBusy) setIdcloudOpen(o); }}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Cloud className="h-5 w-5" />
-              iDCloud — Sincronização pela nuvem
-            </DialogTitle>
-            <DialogDescription>
-              Conecta diretamente no banco do iDCloud (ControlID) via internet. Não requer estar na mesma rede do REP.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Button onClick={handleIdcloudProbe} disabled={idcloudBusy !== null} variant="outline">
-                {idcloudBusy === "probe" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-                Diagnosticar conexão / listar empresas
-              </Button>
-              {idcloudProbe?.error && (
-                <span className="text-sm text-destructive">{idcloudProbe.error}</span>
-              )}
-            </div>
-
-            {idcloudProbe?.empregadores && idcloudProbe.empregadores.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium block mb-1">Empresa (id_Empregador)</label>
-                  <Select
-                    value={idcloudIdEmpregador}
-                    onValueChange={(v) => { setIdcloudIdEmpregador(v); persistIdcloud(v, idcloudEquipLocal); }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Escolha a empresa" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {idcloudProbe.empregadores.map((e) => {
-                        const stat = idcloudProbe.stats?.find((s) => s.id_Empregador === e.id);
-                        return (
-                          <SelectItem key={e.id} value={String(e.id)}>
-                            {e.RazaoSocial || `Empresa ${e.id}`}
-                            {e.CNPJ ? ` • ${e.CNPJ}` : ""}
-                            {stat ? ` • ${stat.total_afd} marcações` : ""}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium block mb-1">Vincular ao equipamento local (opcional)</label>
-                  <Select
-                    value={idcloudEquipLocal}
-                    onValueChange={(v) => { setIdcloudEquipLocal(v); persistIdcloud(idcloudIdEmpregador, v); }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Nenhum (sem vínculo)</SelectItem>
-                      {equipamentos.map((e) => (
-                        <SelectItem key={e.id} value={e.id}>
-                          {e.nome}{e.numero_serie ? ` • SN ${e.numero_serie}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-
-            {idcloudIdEmpregador && (
-              <div className="border-t pt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <Button onClick={handleIdcloudPullPessoas} disabled={idcloudBusy !== null} variant="outline">
-                  {idcloudBusy === "pull" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CloudDownload className="h-4 w-4 mr-1" />}
-                  Importar funcionários
-                </Button>
-                <Button onClick={handleIdcloudPushPessoas} disabled={idcloudBusy !== null} variant="outline">
-                  {idcloudBusy === "push" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Cloud className="h-4 w-4 mr-1" />}
-                  Enviar funcionários
-                </Button>
-                <Button onClick={handleIdcloudSyncAfd} disabled={idcloudBusy !== null}>
-                  {idcloudBusy === "afd" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-                  Sincronizar AFD
-                </Button>
-              </div>
-            )}
-
-            {!idcloudProbe && (
-              <p className="text-sm text-muted-foreground">
-                Clique em <strong>Diagnosticar</strong> para conectar no iDCloud e descobrir as empresas vinculadas à sua credencial.
-              </p>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIdcloudOpen(false)} disabled={idcloudBusy !== null}>
-              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
