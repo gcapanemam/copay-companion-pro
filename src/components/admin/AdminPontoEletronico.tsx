@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Plus, RefreshCw, Pencil, Wifi, WifiOff, Clock, Search, FileUp } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Pencil, Wifi, WifiOff, Clock, Search, FileUp, Cloud, CloudDownload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EquipamentoPontoDialog } from "./EquipamentoPontoDialog";
 import { AdminJornadas } from "./AdminJornadas";
