@@ -2256,6 +2256,109 @@ export function AdminPontoEletronico() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ===== iDCloud (Nuvem ControlID) ===== */}
+      <Dialog open={idcloudOpen} onOpenChange={(o) => { if (!idcloudBusy) setIdcloudOpen(o); }}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Cloud className="h-5 w-5" />
+              iDCloud — Sincronização pela nuvem
+            </DialogTitle>
+            <DialogDescription>
+              Conecta diretamente no banco do iDCloud (ControlID) via internet. Não requer estar na mesma rede do REP.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Button onClick={handleIdcloudProbe} disabled={idcloudBusy !== null} variant="outline">
+                {idcloudBusy === "probe" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                Diagnosticar conexão / listar empresas
+              </Button>
+              {idcloudProbe?.error && (
+                <span className="text-sm text-destructive">{idcloudProbe.error}</span>
+              )}
+            </div>
+
+            {idcloudProbe?.empregadores && idcloudProbe.empregadores.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium block mb-1">Empresa (id_Empregador)</label>
+                  <Select
+                    value={idcloudIdEmpregador}
+                    onValueChange={(v) => { setIdcloudIdEmpregador(v); persistIdcloud(v, idcloudEquipLocal); }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolha a empresa" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {idcloudProbe.empregadores.map((e) => {
+                        const stat = idcloudProbe.stats?.find((s) => s.id_Empregador === e.id);
+                        return (
+                          <SelectItem key={e.id} value={String(e.id)}>
+                            {e.RazaoSocial || `Empresa ${e.id}`}
+                            {e.CNPJ ? ` • ${e.CNPJ}` : ""}
+                            {stat ? ` • ${stat.total_afd} marcações` : ""}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium block mb-1">Vincular ao equipamento local (opcional)</label>
+                  <Select
+                    value={idcloudEquipLocal}
+                    onValueChange={(v) => { setIdcloudEquipLocal(v); persistIdcloud(idcloudIdEmpregador, v); }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Nenhum (sem vínculo)</SelectItem>
+                      {equipamentos.map((e) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.nome}{e.numero_serie ? ` • SN ${e.numero_serie}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {idcloudIdEmpregador && (
+              <div className="border-t pt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <Button onClick={handleIdcloudPullPessoas} disabled={idcloudBusy !== null} variant="outline">
+                  {idcloudBusy === "pull" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CloudDownload className="h-4 w-4 mr-1" />}
+                  Importar funcionários
+                </Button>
+                <Button onClick={handleIdcloudPushPessoas} disabled={idcloudBusy !== null} variant="outline">
+                  {idcloudBusy === "push" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Cloud className="h-4 w-4 mr-1" />}
+                  Enviar funcionários
+                </Button>
+                <Button onClick={handleIdcloudSyncAfd} disabled={idcloudBusy !== null}>
+                  {idcloudBusy === "afd" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                  Sincronizar AFD
+                </Button>
+              </div>
+            )}
+
+            {!idcloudProbe && (
+              <p className="text-sm text-muted-foreground">
+                Clique em <strong>Diagnosticar</strong> para conectar no iDCloud e descobrir as empresas vinculadas à sua credencial.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIdcloudOpen(false)} disabled={idcloudBusy !== null}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
