@@ -1624,6 +1624,14 @@ export function AdminPontoEletronico() {
             <FileUp className="h-4 w-4 mr-1" />
             Importar AFD (arquivo)
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setIdcloudOpen(true)}
+            title="Sincronizar com iDCloud (nuvem ControlID)"
+          >
+            <Cloud className="h-4 w-4 mr-1" />
+            iDCloud (Nuvem)
+          </Button>
           <Button onClick={() => { setEditing(null); setDialogOpen(true); }}>
             <Plus className="h-4 w-4 mr-1" />
             Novo Equipamento
