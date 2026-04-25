@@ -731,6 +731,14 @@ export function AdminValeTransporte() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="inconsistencias" className="space-y-6 mt-4">
+          <AdminVtInconsistencias />
+        </TabsContent>
+
+        <TabsContent value="calendario" className="space-y-6 mt-4">
+          <AdminVtCalendario />
+        </TabsContent>
       </Tabs>
 
       {/* Dialog de preview do PDF */}
