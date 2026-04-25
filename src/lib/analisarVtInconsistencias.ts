@@ -262,3 +262,52 @@ export const ROTULOS_REGRA: Record<RegraVt, string> = {
   cadastro_incompleto_jornada: "Cadastro incompleto: jornada",
   cadastro_incompleto_linhas: "Cadastro incompleto: linhas",
 };
+
+/**
+ * Extrai entrada e saída de um texto livre como:
+ *   "9:30 as 19:30"
+ *   "7:00 às 13:00"
+ *   "07 DA MANHÃ Á 12:00"
+ *   "8h às 17h"
+ *   "08:00-18:00"
+ * Retorna { entrada: "HH:mm", saida: "HH:mm" } ou null se não conseguir.
+ *
+ * Heurística: extrai todos os horários (com ou sem minutos), com tratamento
+ * para "manhã/manha" (AM) e "tarde/noite" (PM, soma 12h se < 12).
+ */
+export function parseHorarioTrabalho(
+  texto: string | null | undefined
+): { entrada: string; saida: string } | null {
+  if (!texto) return null;
+  const t = String(texto).toLowerCase();
+
+  // Captura números de hora opcionalmente seguidos de :MM ou hMM, com possível sufixo am/pm/manha/tarde/noite
+  // Ex: "07", "7:00", "8h30", "7:00 da manhã"
+  const re =
+    /(\d{1,2})(?:[:h](\d{2}))?\s*(?:da\s+)?(manh[aã]|tarde|noite|am|pm)?/g;
+
+  const horarios: Array<{ h: number; m: number }> = [];
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(t)) !== null) {
+    let h = parseInt(match[1], 10);
+    const m = match[2] ? parseInt(match[2], 10) : 0;
+    const sufixo = match[3];
+    if (Number.isNaN(h) || h > 24 || m > 59) continue;
+    if (sufixo === "tarde" || sufixo === "noite" || sufixo === "pm") {
+      if (h < 12) h += 12;
+    }
+    if (sufixo === "manha" || sufixo === "manhã" || sufixo === "am") {
+      if (h === 12) h = 0;
+    }
+    if (h === 24) h = 0;
+    horarios.push({ h, m });
+  }
+
+  if (horarios.length < 2) return null;
+
+  const entrada = horarios[0];
+  const saida = horarios[horarios.length - 1];
+  const fmt = (x: { h: number; m: number }) =>
+    `${String(x.h).padStart(2, "0")}:${String(x.m).padStart(2, "0")}`;
+  return { entrada: fmt(entrada), saida: fmt(saida) };
+}
