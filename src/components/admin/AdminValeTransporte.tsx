@@ -707,6 +707,83 @@ export function AdminValeTransporte() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de edição do cartão */}
+      <Dialog open={!!editCartao} onOpenChange={(o) => !o && setEditCartao(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar Cartão de VT</DialogTitle>
+          </DialogHeader>
+          {editCartao && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Número do cartão</Label>
+                  <Input value={editNumero} onChange={(e) => setEditNumero(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Funcionário</Label>
+                  <Select value={editCpf} onValueChange={setEditCpf}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {(beneficiarios || []).map((b) => (
+                        <SelectItem key={b.cpf} value={b.cpf!}>{b.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Observação</Label>
+                <Input value={editObs} onChange={(e) => setEditObs(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Linhas de ônibus</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={editLinhaInput}
+                    onChange={(e) => setEditLinhaInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        adicionarLinhaEdit();
+                      }
+                    }}
+                    placeholder="Ex.: 6062, 8217..."
+                  />
+                  <Button type="button" variant="secondary" onClick={adicionarLinhaEdit}>
+                    <Plus className="h-4 w-4 mr-1" />Adicionar
+                  </Button>
+                </div>
+                {editLinhas.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {editLinhas.map((l) => (
+                      <span key={l} className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-sm">
+                        {l}
+                        <button
+                          type="button"
+                          onClick={() => removerLinhaEdit(l)}
+                          className="text-muted-foreground hover:text-destructive"
+                          aria-label={`Remover ${l}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditCartao(null)} disabled={editSaving}>Cancelar</Button>
+            <Button onClick={handleSalvarEdicao} disabled={editSaving}>
+              {editSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <CreditCard className="h-4 w-4 mr-1" />}
+              Salvar alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
