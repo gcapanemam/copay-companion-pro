@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import * as XLSX from "xlsx";
 import { parseValeTransportePdf, type VtPdfParseResult } from "@/lib/parseValeTransportePdf";
-import { analisarVtInconsistencias } from "@/lib/analisarVtInconsistencias";
+import { analisarVtInconsistencias, parseHorarioTrabalho } from "@/lib/analisarVtInconsistencias";
 import { AdminVtCalendario } from "./AdminVtCalendario";
 import { AdminVtInconsistencias } from "./AdminVtInconsistencias";
 
