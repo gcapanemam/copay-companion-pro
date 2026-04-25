@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Check, X, RefreshCw, Loader2 } from "lucide-react";
-import { ROTULOS_REGRA, type RegraVt, analisarVtInconsistencias } from "@/lib/analisarVtInconsistencias";
+import { ROTULOS_REGRA, type RegraVt, analisarVtInconsistencias, parseHorarioTrabalho } from "@/lib/analisarVtInconsistencias";
 
 const STATUS_LABEL: Record<string, string> = {
   pendente: "Pendente",
