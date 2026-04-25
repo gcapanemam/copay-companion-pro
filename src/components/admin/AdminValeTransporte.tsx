@@ -271,28 +271,25 @@ export function AdminValeTransporte() {
           .gte("data_hora", periodoIni)
           .lte("data_hora", periodoFim);
 
-        const [{ data: cartoesAll }, { data: cal }, { data: fer }, { data: vigs }, { data: jornadas }] = await Promise.all([
+        const [{ data: cartoesAll }, { data: cal }, { data: fer }, { data: admissoesAll }] = await Promise.all([
           supabase.from("vt_cartoes").select("*"),
           supabase.from("vt_calendario").select("*"),
           supabase.from("vt_ferias").select("*"),
-          supabase.from("funcionario_jornada").select("cpf, vigencia_inicio, vigencia_fim, jornada_id"),
-          supabase.from("jornadas_trabalho").select("id, dias_semana, entrada_padrao, saida_padrao"),
+          supabase.from("admissoes").select("cpf, horario_trabalho"),
         ]);
 
-        const jornadaMap = new Map<string, any>();
-        (jornadas || []).forEach((j: any) => jornadaMap.set(j.id, j));
-        const vigencias = (vigs || [])
-          .map((v: any) => {
-            const j = jornadaMap.get(v.jornada_id);
-            if (!j) return null;
+        const vigencias = (admissoesAll || [])
+          .map((a: any) => {
+            const parsed = parseHorarioTrabalho(a.horario_trabalho);
+            if (!parsed) return null;
             return {
-              cpf: v.cpf,
-              vigencia_inicio: v.vigencia_inicio,
-              vigencia_fim: v.vigencia_fim,
+              cpf: a.cpf,
+              vigencia_inicio: "1900-01-01",
+              vigencia_fim: null,
               jornada: {
-                dias_semana: Array.isArray(j.dias_semana) ? j.dias_semana : [1, 2, 3, 4, 5],
-                entrada_padrao: j.entrada_padrao,
-                saida_padrao: j.saida_padrao,
+                dias_semana: [1, 2, 3, 4, 5],
+                entrada_padrao: parsed.entrada,
+                saida_padrao: parsed.saida,
               },
             };
           })
