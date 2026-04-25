@@ -374,7 +374,17 @@ export function AdminValeTransporte() {
         <TabsContent value="usos" className="space-y-6 mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Usos detalhados do cartão (passagens)</CardTitle>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle>Usos detalhados do cartão (passagens)</CardTitle>
+                <div>
+                  <Label htmlFor="vt-pdf-upload" className="cursor-pointer">
+                    <div className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium h-10 px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground">
+                      <FileText className="h-4 w-4" />Importar Relatório de Uso (PDF)
+                    </div>
+                  </Label>
+                  <Input id="vt-pdf-upload" type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleUploadPdf} />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
