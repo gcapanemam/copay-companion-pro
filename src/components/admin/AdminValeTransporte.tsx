@@ -530,6 +530,7 @@ export function AdminValeTransporte() {
                     <TableHead>Cartão</TableHead>
                     <TableHead>Funcionário</TableHead>
                     <TableHead>Titular (PDF)</TableHead>
+                    <TableHead>Linhas</TableHead>
                     <TableHead>Obs</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
@@ -540,6 +541,19 @@ export function AdminValeTransporte() {
                       <TableCell className="font-mono">{c.numero_cartao}</TableCell>
                       <TableCell>{getNome(c.cpf)}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">{c.titular_nome || "-"}</TableCell>
+                      <TableCell>
+                        {Array.isArray(c.linhas) && c.linhas.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {c.linhas.map((l: string) => (
+                              <span key={l} className="inline-block rounded-full bg-secondary px-2 py-0.5 text-xs">
+                                {l}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
+                      </TableCell>
                       <TableCell>{c.observacao || "-"}</TableCell>
                       <TableCell>
                         <Button variant="ghost" size="icon" onClick={() => handleDeleteCartao(c.id)}>
@@ -550,7 +564,7 @@ export function AdminValeTransporte() {
                   ))}
                   {(!cartoes || cartoes.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
                         Nenhum cartão cadastrado.
                       </TableCell>
                     </TableRow>
