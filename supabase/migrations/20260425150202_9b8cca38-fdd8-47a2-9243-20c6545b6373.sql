@@ -1,0 +1,1 @@
+ALTER TABLE public.vt_cartoes ADD COLUMN IF NOT EXISTS linhas TEXT[] NOT NULL DEFAULT '{}'::text[];

@@ -42,6 +42,21 @@ export function AdminValeTransporte() {
   const [novoCartao, setNovoCartao] = useState("");
   const [novoCartaoCpf, setNovoCartaoCpf] = useState("");
   const [novoCartaoObs, setNovoCartaoObs] = useState("");
+  const [novoCartaoLinhas, setNovoCartaoLinhas] = useState<string[]>([]);
+  const [linhaInput, setLinhaInput] = useState("");
+
+  const adicionarLinha = () => {
+    const v = linhaInput.trim();
+    if (!v) return;
+    if (novoCartaoLinhas.includes(v)) {
+      setLinhaInput("");
+      return;
+    }
+    setNovoCartaoLinhas([...novoCartaoLinhas, v]);
+    setLinhaInput("");
+  };
+  const removerLinha = (l: string) =>
+    setNovoCartaoLinhas(novoCartaoLinhas.filter((x) => x !== l));
 
   const { data: registros, isLoading } = useQuery({
     queryKey: ["admin-vt"],
@@ -237,7 +252,8 @@ export function AdminValeTransporte() {
         cpf: novoCartaoCpf.replace(/\D/g, ""),
         titular_nome: titularNome,
         observacao: novoCartaoObs || null,
-      },
+        linhas: novoCartaoLinhas,
+      } as any,
       { onConflict: "numero_cartao" }
     );
     if (error) {
@@ -248,6 +264,8 @@ export function AdminValeTransporte() {
     setNovoCartao("");
     setNovoCartaoCpf("");
     setNovoCartaoObs("");
+    setNovoCartaoLinhas([]);
+    setLinhaInput("");
     queryClient.invalidateQueries({ queryKey: ["vt-cartoes"] });
   };
 
@@ -455,6 +473,48 @@ export function AdminValeTransporte() {
                   <Input value={novoCartaoObs} onChange={(e) => setNovoCartaoObs(e.target.value)} />
                 </div>
               </div>
+              <div className="space-y-2 mb-4">
+                <Label>Linhas de ônibus</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={linhaInput}
+                    onChange={(e) => setLinhaInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        adicionarLinha();
+                      }
+                    }}
+                    placeholder="Ex.: 6062, 8217, SE01..."
+                  />
+                  <Button type="button" variant="secondary" onClick={adicionarLinha}>
+                    <Plus className="h-4 w-4 mr-1" />Adicionar
+                  </Button>
+                </div>
+                {novoCartaoLinhas.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {novoCartaoLinhas.map((l) => (
+                      <span
+                        key={l}
+                        className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-sm"
+                      >
+                        {l}
+                        <button
+                          type="button"
+                          onClick={() => removerLinha(l)}
+                          className="text-muted-foreground hover:text-destructive"
+                          aria-label={`Remover ${l}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Pressione Enter ou vírgula para adicionar várias linhas.
+                </p>
+              </div>
               <Button onClick={handleAddCartao}>
                 <CreditCard className="h-4 w-4 mr-1" />Salvar Cartão
               </Button>
@@ -470,6 +530,7 @@ export function AdminValeTransporte() {
                     <TableHead>Cartão</TableHead>
                     <TableHead>Funcionário</TableHead>
                     <TableHead>Titular (PDF)</TableHead>
+                    <TableHead>Linhas</TableHead>
                     <TableHead>Obs</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
@@ -480,6 +541,19 @@ export function AdminValeTransporte() {
                       <TableCell className="font-mono">{c.numero_cartao}</TableCell>
                       <TableCell>{getNome(c.cpf)}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">{c.titular_nome || "-"}</TableCell>
+                      <TableCell>
+                        {Array.isArray(c.linhas) && c.linhas.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {c.linhas.map((l: string) => (
+                              <span key={l} className="inline-block rounded-full bg-secondary px-2 py-0.5 text-xs">
+                                {l}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
+                      </TableCell>
                       <TableCell>{c.observacao || "-"}</TableCell>
                       <TableCell>
                         <Button variant="ghost" size="icon" onClick={() => handleDeleteCartao(c.id)}>
@@ -490,7 +564,7 @@ export function AdminValeTransporte() {
                   ))}
                   {(!cartoes || cartoes.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
                         Nenhum cartão cadastrado.
                       </TableCell>
                     </TableRow>
