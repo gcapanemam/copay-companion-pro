@@ -252,7 +252,8 @@ export function AdminValeTransporte() {
         cpf: novoCartaoCpf.replace(/\D/g, ""),
         titular_nome: titularNome,
         observacao: novoCartaoObs || null,
-      },
+        linhas: novoCartaoLinhas,
+      } as any,
       { onConflict: "numero_cartao" }
     );
     if (error) {
@@ -263,6 +264,8 @@ export function AdminValeTransporte() {
     setNovoCartao("");
     setNovoCartaoCpf("");
     setNovoCartaoObs("");
+    setNovoCartaoLinhas([]);
+    setLinhaInput("");
     queryClient.invalidateQueries({ queryKey: ["vt-cartoes"] });
   };
 
