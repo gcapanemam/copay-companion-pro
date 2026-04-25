@@ -257,7 +257,97 @@ export function AdminValeTransporte() {
         if (error) throw error;
         inseridos += count ?? batch.length;
       }
-      toast({ title: `${inseridos} usos importados!`, description: `Cartão ${pdfPreview.numeroCartao}` });
+
+      // Analisa inconsistências dos usos recém importados
+      try {
+        const periodoIni = pdfPreview.usos.reduce((m, u) => (u.data_hora < m ? u.data_hora : m), pdfPreview.usos[0].data_hora);
+        const periodoFim = pdfPreview.usos.reduce((m, u) => (u.data_hora > m ? u.data_hora : m), pdfPreview.usos[0].data_hora);
+        const numeroCartao = pdfPreview.numeroCartao || "DESCONHECIDO";
+
+        const { data: usosBd } = await supabase
+          .from("vt_usos")
+          .select("*")
+          .eq("numero_cartao", numeroCartao)
+          .gte("data_hora", periodoIni)
+          .lte("data_hora", periodoFim);
+
+        const [{ data: cartoesAll }, { data: cal }, { data: fer }, { data: vigs }, { data: jornadas }] = await Promise.all([
+          supabase.from("vt_cartoes").select("*"),
+          supabase.from("vt_calendario").select("*"),
+          supabase.from("vt_ferias").select("*"),
+          supabase.from("funcionario_jornada").select("cpf, vigencia_inicio, vigencia_fim, jornada_id"),
+          supabase.from("jornadas_trabalho").select("id, dias_semana, entrada_padrao, saida_padrao"),
+        ]);
+
+        const jornadaMap = new Map<string, any>();
+        (jornadas || []).forEach((j: any) => jornadaMap.set(j.id, j));
+        const vigencias = (vigs || [])
+          .map((v: any) => {
+            const j = jornadaMap.get(v.jornada_id);
+            if (!j) return null;
+            return {
+              cpf: v.cpf,
+              vigencia_inicio: v.vigencia_inicio,
+              vigencia_fim: v.vigencia_fim,
+              jornada: {
+                dias_semana: Array.isArray(j.dias_semana) ? j.dias_semana : [1, 2, 3, 4, 5],
+                entrada_padrao: j.entrada_padrao,
+                saida_padrao: j.saida_padrao,
+              },
+            };
+          })
+          .filter(Boolean) as any[];
+
+        const resultado = analisarVtInconsistencias({
+          usos: (usosBd || []).map((u: any) => ({
+            id: u.id,
+            cpf: u.cpf,
+            numero_cartao: u.numero_cartao,
+            data_hora: u.data_hora,
+            linha: u.linha,
+            valor: Number(u.valor),
+          })),
+          vigencias,
+          cartoes: (cartoesAll || []).map((c: any) => ({
+            numero_cartao: c.numero_cartao,
+            linhas: Array.isArray(c.linhas) ? c.linhas : [],
+          })),
+          calendario: (cal || []).map((c: any) => ({ data: c.data, tipo: c.tipo })),
+          ferias: (fer || []).map((f: any) => ({
+            cpf: f.cpf,
+            data_inicio: f.data_inicio,
+            data_fim: f.data_fim,
+          })),
+        });
+
+        if (resultado.length > 0) {
+          const payloadInc = resultado.map((r) => ({
+            uso_id: r.uso_id,
+            cpf: r.cpf,
+            numero_cartao: r.numero_cartao,
+            data_hora: r.data_hora,
+            linha: r.linha,
+            valor: r.valor,
+            regra: r.regra,
+            detalhe: r.detalhe,
+          }));
+          for (let i = 0; i < payloadInc.length; i += 200) {
+            const batch = payloadInc.slice(i, i + 200);
+            await supabase
+              .from("vt_inconsistencias")
+              .upsert(batch, { onConflict: "uso_id", ignoreDuplicates: true });
+          }
+        }
+        toast({
+          title: `${inseridos} usos importados!`,
+          description: `${resultado.length} inconsistências detectadas`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["vt-incs"] });
+      } catch (e: any) {
+        console.error("Falha na análise de inconsistências", e);
+        toast({ title: `${inseridos} usos importados`, description: "Análise de inconsistências falhou — rode manualmente." });
+      }
+
       setPdfPreview(null);
       setPdfCpfManual("");
       queryClient.invalidateQueries({ queryKey: ["vt-usos"] });
