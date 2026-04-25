@@ -442,6 +442,8 @@ export function AdminValeTransporte() {
           <TabsTrigger value="mensal">Lançamentos Mensais</TabsTrigger>
           <TabsTrigger value="usos">Usos do Cartão</TabsTrigger>
           <TabsTrigger value="cartoes">Cartões</TabsTrigger>
+          <TabsTrigger value="inconsistencias">Inconsistências</TabsTrigger>
+          <TabsTrigger value="calendario">Calendário</TabsTrigger>
         </TabsList>
 
         <TabsContent value="mensal" className="space-y-6 mt-4">
