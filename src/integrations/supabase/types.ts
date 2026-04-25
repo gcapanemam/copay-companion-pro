@@ -1473,6 +1473,78 @@ export type Database = {
         }
         Relationships: []
       }
+      vt_cartoes: {
+        Row: {
+          ativo: boolean
+          cpf: string
+          created_at: string
+          id: string
+          numero_cartao: string
+          observacao: string | null
+          titular_nome: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          cpf: string
+          created_at?: string
+          id?: string
+          numero_cartao: string
+          observacao?: string | null
+          titular_nome?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          cpf?: string
+          created_at?: string
+          id?: string
+          numero_cartao?: string
+          observacao?: string | null
+          titular_nome?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      vt_usos: {
+        Row: {
+          cpf: string | null
+          created_at: string
+          data_hora: string
+          id: string
+          linha: string | null
+          numero_cartao: string
+          observacao: string | null
+          operadora: string | null
+          tipo_tarifa: string | null
+          valor: number
+        }
+        Insert: {
+          cpf?: string | null
+          created_at?: string
+          data_hora: string
+          id?: string
+          linha?: string | null
+          numero_cartao: string
+          observacao?: string | null
+          operadora?: string | null
+          tipo_tarifa?: string | null
+          valor?: number
+        }
+        Update: {
+          cpf?: string | null
+          created_at?: string
+          data_hora?: string
+          id?: string
+          linha?: string | null
+          numero_cartao?: string
+          observacao?: string | null
+          operadora?: string | null
+          tipo_tarifa?: string | null
+          valor?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
