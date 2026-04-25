@@ -58,6 +58,33 @@ export function AdminValeTransporte() {
   const removerLinha = (l: string) =>
     setNovoCartaoLinhas(novoCartaoLinhas.filter((x) => x !== l));
 
+  // Edição de cartão
+  const [editCartao, setEditCartao] = useState<any | null>(null);
+  const [editLinhas, setEditLinhas] = useState<string[]>([]);
+  const [editLinhaInput, setEditLinhaInput] = useState("");
+  const [editNumero, setEditNumero] = useState("");
+  const [editCpf, setEditCpf] = useState("");
+  const [editObs, setEditObs] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
+  const abrirEdicao = (c: any) => {
+    setEditCartao(c);
+    setEditNumero(c.numero_cartao || "");
+    setEditCpf(c.cpf || "");
+    setEditObs(c.observacao || "");
+    setEditLinhas(Array.isArray(c.linhas) ? [...c.linhas] : []);
+    setEditLinhaInput("");
+  };
+  const adicionarLinhaEdit = () => {
+    const v = editLinhaInput.trim();
+    if (!v) return;
+    if (editLinhas.includes(v)) { setEditLinhaInput(""); return; }
+    setEditLinhas([...editLinhas, v]);
+    setEditLinhaInput("");
+  };
+  const removerLinhaEdit = (l: string) =>
+    setEditLinhas(editLinhas.filter((x) => x !== l));
+
   const { data: registros, isLoading } = useQuery({
     queryKey: ["admin-vt"],
     queryFn: async () => {
