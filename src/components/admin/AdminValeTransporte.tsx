@@ -42,6 +42,21 @@ export function AdminValeTransporte() {
   const [novoCartao, setNovoCartao] = useState("");
   const [novoCartaoCpf, setNovoCartaoCpf] = useState("");
   const [novoCartaoObs, setNovoCartaoObs] = useState("");
+  const [novoCartaoLinhas, setNovoCartaoLinhas] = useState<string[]>([]);
+  const [linhaInput, setLinhaInput] = useState("");
+
+  const adicionarLinha = () => {
+    const v = linhaInput.trim();
+    if (!v) return;
+    if (novoCartaoLinhas.includes(v)) {
+      setLinhaInput("");
+      return;
+    }
+    setNovoCartaoLinhas([...novoCartaoLinhas, v]);
+    setLinhaInput("");
+  };
+  const removerLinha = (l: string) =>
+    setNovoCartaoLinhas(novoCartaoLinhas.filter((x) => x !== l));
 
   const { data: registros, isLoading } = useQuery({
     queryKey: ["admin-vt"],
