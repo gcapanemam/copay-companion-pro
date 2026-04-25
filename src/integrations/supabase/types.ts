@@ -1473,6 +1473,30 @@ export type Database = {
         }
         Relationships: []
       }
+      vt_calendario: {
+        Row: {
+          created_at: string
+          data: string
+          descricao: string | null
+          id: string
+          tipo: string
+        }
+        Insert: {
+          created_at?: string
+          data: string
+          descricao?: string | null
+          id?: string
+          tipo: string
+        }
+        Update: {
+          created_at?: string
+          data?: string
+          descricao?: string | null
+          id?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
       vt_cartoes: {
         Row: {
           ativo: boolean
@@ -1508,6 +1532,98 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      vt_ferias: {
+        Row: {
+          cpf: string
+          created_at: string
+          data_fim: string
+          data_inicio: string
+          id: string
+          observacao: string | null
+        }
+        Insert: {
+          cpf: string
+          created_at?: string
+          data_fim: string
+          data_inicio: string
+          id?: string
+          observacao?: string | null
+        }
+        Update: {
+          cpf?: string
+          created_at?: string
+          data_fim?: string
+          data_inicio?: string
+          id?: string
+          observacao?: string | null
+        }
+        Relationships: []
+      }
+      vt_inconsistencias: {
+        Row: {
+          cpf: string | null
+          created_at: string
+          data_hora: string
+          decisao_em: string | null
+          decisao_por: string | null
+          detalhe: string | null
+          id: string
+          justificada_em: string | null
+          justificativa: string | null
+          linha: string | null
+          numero_cartao: string
+          observacao_admin: string | null
+          regra: string
+          status: string
+          uso_id: string
+          valor: number
+        }
+        Insert: {
+          cpf?: string | null
+          created_at?: string
+          data_hora: string
+          decisao_em?: string | null
+          decisao_por?: string | null
+          detalhe?: string | null
+          id?: string
+          justificada_em?: string | null
+          justificativa?: string | null
+          linha?: string | null
+          numero_cartao: string
+          observacao_admin?: string | null
+          regra: string
+          status?: string
+          uso_id: string
+          valor?: number
+        }
+        Update: {
+          cpf?: string | null
+          created_at?: string
+          data_hora?: string
+          decisao_em?: string | null
+          decisao_por?: string | null
+          detalhe?: string | null
+          id?: string
+          justificada_em?: string | null
+          justificativa?: string | null
+          linha?: string | null
+          numero_cartao?: string
+          observacao_admin?: string | null
+          regra?: string
+          status?: string
+          uso_id?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vt_inconsistencias_uso_id_fkey"
+            columns: ["uso_id"]
+            isOneToOne: true
+            referencedRelation: "vt_usos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vt_usos: {
         Row: {

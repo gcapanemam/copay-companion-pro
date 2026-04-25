@@ -1526,7 +1526,7 @@ const MinhaArea = () => {
         );
       case "contracheques": return <PortalContracheques contracheques={contracheques} />;
       case "epis": return <PortalEPIs epis={epis} />;
-      case "vt": return <PortalValeTransporte valeTransporte={valeTransporte} />;
+      case "vt": return <PortalValeTransporte valeTransporte={valeTransporte} cpf={userCpf} />;
       case "ponto": return <PortalPonto cpf={userCpf} />;
       case "comunicados": return <PortalComunicados comunicados={comunicados} cpf={userCpf} unidade={admissao?.unidade} departamento={admissao?.departamento} />;
       case "tarefas": return <PortalTarefas cpf={userCpf} departamento={admissao?.departamento} unidade={admissao?.unidade} />;
