@@ -330,13 +330,6 @@ export function AdminValeTransporte() {
                   </div>
                 </Label>
                 <Input id="vt-upload" type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleUploadPlanilha} />
-
-                <Label htmlFor="vt-pdf-upload" className="cursor-pointer">
-                  <div className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium h-10 px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground">
-                    <FileText className="h-4 w-4" />Importar Relatório de Uso (PDF)
-                  </div>
-                </Label>
-                <Input id="vt-pdf-upload" type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleUploadPdf} />
               </div>
             </CardContent>
           </Card>
