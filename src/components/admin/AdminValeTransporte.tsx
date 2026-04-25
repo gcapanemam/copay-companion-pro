@@ -301,6 +301,36 @@ export function AdminValeTransporte() {
     queryClient.invalidateQueries({ queryKey: ["vt-cartoes"] });
   };
 
+  const handleSalvarEdicao = async () => {
+    if (!editCartao) return;
+    if (!editNumero || !editCpf) {
+      toast({ title: "Informe número do cartão e funcionário", variant: "destructive" });
+      return;
+    }
+    setEditSaving(true);
+    try {
+      const titularNome = (beneficiarios || []).find((b) => b.cpf === editCpf)?.nome || null;
+      const { error } = await supabase
+        .from("vt_cartoes")
+        .update({
+          numero_cartao: editNumero.trim(),
+          cpf: editCpf.replace(/\D/g, ""),
+          titular_nome: titularNome,
+          observacao: editObs || null,
+          linhas: editLinhas,
+        } as any)
+        .eq("id", editCartao.id);
+      if (error) throw error;
+      toast({ title: "Cartão atualizado!" });
+      setEditCartao(null);
+      queryClient.invalidateQueries({ queryKey: ["vt-cartoes"] });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const handleDeleteUso = async (id: string) => {
     await supabase.from("vt_usos").delete().eq("id", id);
     queryClient.invalidateQueries({ queryKey: ["vt-usos"] });
