@@ -19,6 +19,9 @@ import {
 } from "@/components/ui/dialog";
 import * as XLSX from "xlsx";
 import { parseValeTransportePdf, type VtPdfParseResult } from "@/lib/parseValeTransportePdf";
+import { analisarVtInconsistencias } from "@/lib/analisarVtInconsistencias";
+import { AdminVtCalendario } from "./AdminVtCalendario";
+import { AdminVtInconsistencias } from "./AdminVtInconsistencias";
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
