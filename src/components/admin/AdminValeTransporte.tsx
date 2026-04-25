@@ -473,6 +473,48 @@ export function AdminValeTransporte() {
                   <Input value={novoCartaoObs} onChange={(e) => setNovoCartaoObs(e.target.value)} />
                 </div>
               </div>
+              <div className="space-y-2 mb-4">
+                <Label>Linhas de ônibus</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={linhaInput}
+                    onChange={(e) => setLinhaInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        adicionarLinha();
+                      }
+                    }}
+                    placeholder="Ex.: 6062, 8217, SE01..."
+                  />
+                  <Button type="button" variant="secondary" onClick={adicionarLinha}>
+                    <Plus className="h-4 w-4 mr-1" />Adicionar
+                  </Button>
+                </div>
+                {novoCartaoLinhas.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {novoCartaoLinhas.map((l) => (
+                      <span
+                        key={l}
+                        className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-sm"
+                      >
+                        {l}
+                        <button
+                          type="button"
+                          onClick={() => removerLinha(l)}
+                          className="text-muted-foreground hover:text-destructive"
+                          aria-label={`Remover ${l}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Pressione Enter ou vírgula para adicionar várias linhas.
+                </p>
+              </div>
               <Button onClick={handleAddCartao}>
                 <CreditCard className="h-4 w-4 mr-1" />Salvar Cartão
               </Button>
