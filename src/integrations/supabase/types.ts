@@ -1479,6 +1479,7 @@ export type Database = {
           cpf: string
           created_at: string
           id: string
+          linhas: string[]
           numero_cartao: string
           observacao: string | null
           titular_nome: string | null
@@ -1489,6 +1490,7 @@ export type Database = {
           cpf: string
           created_at?: string
           id?: string
+          linhas?: string[]
           numero_cartao: string
           observacao?: string | null
           titular_nome?: string | null
@@ -1499,6 +1501,7 @@ export type Database = {
           cpf?: string
           created_at?: string
           id?: string
+          linhas?: string[]
           numero_cartao?: string
           observacao?: string | null
           titular_nome?: string | null
