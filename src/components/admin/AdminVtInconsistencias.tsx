@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Check, X, RefreshCw, Loader2 } from "lucide-react";
-import { ROTULOS_REGRA, type RegraVt, analisarVtInconsistencias } from "@/lib/analisarVtInconsistencias";
+import { ROTULOS_REGRA, type RegraVt, analisarVtInconsistencias, parseHorarioTrabalho } from "@/lib/analisarVtInconsistencias";
 
 const STATUS_LABEL: Record<string, string> = {
   pendente: "Pendente",
@@ -96,32 +96,26 @@ export function AdminVtInconsistencias() {
     setReanalisando(true);
     try {
       // Carrega tudo necessário
-      const [{ data: usos }, { data: cartoes }, { data: cal }, { data: fer }, { data: vigs }] = await Promise.all([
+      const [{ data: usos }, { data: cartoes }, { data: cal }, { data: fer }, { data: admissoes }] = await Promise.all([
         supabase.from("vt_usos").select("*").gte("data_hora", `${ini}T00:00:00`).lte("data_hora", `${fim}T23:59:59`),
         supabase.from("vt_cartoes").select("*"),
         supabase.from("vt_calendario").select("*"),
         supabase.from("vt_ferias").select("*"),
-        supabase.from("funcionario_jornada").select("cpf, vigencia_inicio, vigencia_fim, jornada_id"),
+        supabase.from("admissoes").select("cpf, horario_trabalho"),
       ]);
-      const { data: jornadas } = await supabase
-        .from("jornadas_trabalho")
-        .select("id, dias_semana, entrada_padrao, saida_padrao");
 
-      const jornadaMap = new Map<string, any>();
-      (jornadas || []).forEach((j: any) => jornadaMap.set(j.id, j));
-
-      const vigencias = (vigs || [])
-        .map((v: any) => {
-          const j = jornadaMap.get(v.jornada_id);
-          if (!j) return null;
+      const vigencias = (admissoes || [])
+        .map((a: any) => {
+          const parsed = parseHorarioTrabalho(a.horario_trabalho);
+          if (!parsed) return null;
           return {
-            cpf: v.cpf,
-            vigencia_inicio: v.vigencia_inicio,
-            vigencia_fim: v.vigencia_fim,
+            cpf: a.cpf,
+            vigencia_inicio: "1900-01-01",
+            vigencia_fim: null,
             jornada: {
-              dias_semana: Array.isArray(j.dias_semana) ? j.dias_semana : [1, 2, 3, 4, 5],
-              entrada_padrao: j.entrada_padrao,
-              saida_padrao: j.saida_padrao,
+              dias_semana: [1, 2, 3, 4, 5],
+              entrada_padrao: parsed.entrada,
+              saida_padrao: parsed.saida,
             },
           };
         })
