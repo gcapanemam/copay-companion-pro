@@ -273,7 +273,17 @@ Deno.serve(async (req) => {
         if (!senha) return jsonResponse({ error: "Senha é obrigatória" }, 400);
         const { data: senhaRecord } = await supabase.from("beneficiario_senhas").select("senha_hash").eq("cpf", cleanCpf).maybeSingle();
         if (!senhaRecord) return jsonResponse({ error: "CPF não cadastrado" }, 401);
-        const valid = await verifyPassword(senha, senhaRecord.senha_hash);
+        let valid = await verifyPassword(senha, senhaRecord.senha_hash);
+        // Fallback: senhas iniciais foram salvas como CPF formatado (XXX.XXX.XXX-XX).
+        // Se o usuário digitou apenas dígitos do CPF, tente também a versão formatada (e vice-versa).
+        if (!valid) {
+          const onlyDigits = String(senha).replace(/\D/g, "");
+          if (onlyDigits.length === 11) {
+            const formatted = `${onlyDigits.slice(0,3)}.${onlyDigits.slice(3,6)}.${onlyDigits.slice(6,9)}-${onlyDigits.slice(9)}`;
+            const altCandidate = senha === formatted ? onlyDigits : formatted;
+            valid = await verifyPassword(altCandidate, senhaRecord.senha_hash);
+          }
+        }
         if (!valid) return jsonResponse({ error: "Senha incorreta" }, 401);
 
         // Check if 2FA is enabled
