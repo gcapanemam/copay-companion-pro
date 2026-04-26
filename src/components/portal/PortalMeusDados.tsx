@@ -98,6 +98,14 @@ export const PortalMeusDados = ({ admissao, nome, cpf }: PortalMeusDadosProps) =
   }
 
   const dados = admissao.dados || {};
+  // Fallback: se a coluna estiver vazia, busca no JSONB `dados` (importação do Drive guarda lá)
+  const get = (key: string) => {
+    const colVal = (admissao as any)?.[key];
+    if (colVal !== null && colVal !== undefined && colVal !== "") return colVal;
+    const jsonVal = (dados as any)?.[key];
+    if (jsonVal !== null && jsonVal !== undefined && jsonVal !== "") return jsonVal;
+    return null;
+  };
 
   return (
     <div className="space-y-4">
