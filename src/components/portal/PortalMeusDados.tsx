@@ -98,6 +98,14 @@ export const PortalMeusDados = ({ admissao, nome, cpf }: PortalMeusDadosProps) =
   }
 
   const dados = admissao.dados || {};
+  // Fallback: se a coluna estiver vazia, busca no JSONB `dados` (importação do Drive guarda lá)
+  const get = (key: string) => {
+    const colVal = (admissao as any)?.[key];
+    if (colVal !== null && colVal !== undefined && colVal !== "") return colVal;
+    const jsonVal = (dados as any)?.[key];
+    if (jsonVal !== null && jsonVal !== undefined && jsonVal !== "") return jsonVal;
+    return null;
+  };
 
   return (
     <div className="space-y-4">
@@ -110,21 +118,21 @@ export const PortalMeusDados = ({ admissao, nome, cpf }: PortalMeusDadosProps) =
           <div className="flex flex-col sm:flex-row gap-6">
             <Avatar className="w-28 h-28 rounded-lg border">
               {fotoPublicUrl && <AvatarImage src={fotoPublicUrl} alt={nome} className="object-cover" />}
-              <AvatarFallback className="rounded-lg text-2xl">{getInitials(admissao.nome_completo || nome)}</AvatarFallback>
+              <AvatarFallback className="rounded-lg text-2xl">{getInitials(get("nome_completo") || nome)}</AvatarFallback>
             </Avatar>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 flex-1">
-              <Field label="Nome completo" value={admissao.nome_completo} />
-              <Field label="CPF" value={formatCpf(admissao.cpf)} />
-              <Field label="RG" value={admissao.rg} />
-              <Field label="Data de nascimento" value={admissao.data_nascimento} />
-              <Field label="Sexo" value={admissao.sexo} />
-              <Field label="Estado civil" value={admissao.estado_civil} />
-              <Field label="Escolaridade" value={admissao.escolaridade} />
-              <Field label="Local de nascimento" value={admissao.local_nascimento} />
-              <Field label="Nome da mãe" value={admissao.nome_mae} />
-              <Field label="Nome do pai" value={admissao.nome_pai} />
-              <Field label="E-mail" value={admissao.email} />
-              <Field label="Telefone" value={admissao.telefone} />
+              <Field label="Nome completo" value={get("nome_completo")} />
+              <Field label="CPF" value={formatCpf(get("cpf"))} />
+              <Field label="RG" value={get("rg")} />
+              <Field label="Data de nascimento" value={get("data_nascimento")} />
+              <Field label="Sexo" value={get("sexo")} />
+              <Field label="Estado civil" value={get("estado_civil")} />
+              <Field label="Escolaridade" value={get("escolaridade")} />
+              <Field label="Local de nascimento" value={get("local_nascimento")} />
+              <Field label="Nome da mãe" value={get("nome_mae")} />
+              <Field label="Nome do pai" value={get("nome_pai")} />
+              <Field label="E-mail" value={get("email")} />
+              <Field label="Telefone" value={get("telefone")} />
             </div>
           </div>
         </CardContent>
@@ -137,14 +145,14 @@ export const PortalMeusDados = ({ admissao, nome, cpf }: PortalMeusDadosProps) =
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <Field label="Função" value={admissao.funcao} />
-            <Field label="Departamento" value={admissao.departamento} />
-            <Field label="Unidade" value={admissao.unidade} />
-            <Field label="Horário de trabalho" value={admissao.horario_trabalho} />
-            <Field label="1º dia de trabalho" value={admissao.primeiro_dia_trabalho} />
-            <Field label="Nº PIS" value={admissao.numero_pis} />
-            <Field label="CTPS" value={admissao.numero_ctps} />
-            <Field label="Série CTPS" value={admissao.serie_ctps} />
+            <Field label="Função" value={get("funcao")} />
+            <Field label="Departamento" value={get("departamento")} />
+            <Field label="Unidade" value={get("unidade")} />
+            <Field label="Horário de trabalho" value={get("horario_trabalho")} />
+            <Field label="1º dia de trabalho" value={get("primeiro_dia_trabalho")} />
+            <Field label="Nº PIS" value={get("numero_pis")} />
+            <Field label="CTPS" value={get("numero_ctps")} />
+            <Field label="Série CTPS" value={get("serie_ctps")} />
           </div>
         </CardContent>
       </Card>
@@ -156,21 +164,21 @@ export const PortalMeusDados = ({ admissao, nome, cpf }: PortalMeusDadosProps) =
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <Field label="Endereço" value={admissao.endereco} />
-            <Field label="Bairro" value={admissao.bairro} />
-            <Field label="CEP" value={admissao.cep} />
+            <Field label="Endereço" value={get("endereco")} />
+            <Field label="Bairro" value={get("bairro")} />
+            <Field label="CEP" value={get("cep")} />
           </div>
         </CardContent>
       </Card>
 
       {/* Bancários */}
-      {admissao.dados_bancarios && (
+      {get("dados_bancarios") && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2"><CreditCard className="h-5 w-5" />Dados Bancários</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm">{admissao.dados_bancarios}</p>
+            <p className="text-sm">{get("dados_bancarios")}</p>
           </CardContent>
         </Card>
       )}
