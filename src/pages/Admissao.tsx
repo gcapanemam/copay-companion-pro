@@ -146,6 +146,28 @@ export default function Admissao() {
         );
       case "date":
         return <Input type="date" value={value} onChange={(e) => set(campo.campo_nome, e.target.value)} />;
+      case "horario_intervalo": {
+        const match = value.match(/^(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})$/);
+        const inicio = match?.[1] || "";
+        const fim = match?.[2] || "";
+        const update = (novoInicio: string, novoFim: string) => {
+          if (novoInicio && novoFim) set(campo.campo_nome, `${novoInicio} - ${novoFim}`);
+          else if (novoInicio || novoFim) set(campo.campo_nome, `${novoInicio} - ${novoFim}`);
+          else set(campo.campo_nome, "");
+        };
+        return (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Início</Label>
+              <Input type="time" value={inicio} onChange={(e) => update(e.target.value, fim)} required={campo.obrigatorio} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Fim</Label>
+              <Input type="time" value={fim} onChange={(e) => update(inicio, e.target.value)} required={campo.obrigatorio} />
+            </div>
+          </div>
+        );
+      }
       case "email":
         return <Input type="email" value={value} onChange={(e) => set(campo.campo_nome, e.target.value)} placeholder={campo.placeholder || ""} />;
       default:
