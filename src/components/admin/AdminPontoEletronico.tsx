@@ -1315,8 +1315,20 @@ export function AdminPontoEletronico() {
         return;
       }
       const { empresa, cnpj } = parseAfdHeader(afdText);
-      const nsrs = parsed.map((p) => p.nsr).filter((n) => Number.isFinite(n));
-      const dates = parsed.map((p) => p.date).filter(Boolean).sort();
+      let nsrMin: number | null = null;
+      let nsrMax: number | null = null;
+      let periodoInicio: string | null = null;
+      let periodoFim: string | null = null;
+      for (const p of parsed) {
+        if (Number.isFinite(p.nsr)) {
+          if (nsrMin === null || p.nsr < nsrMin) nsrMin = p.nsr;
+          if (nsrMax === null || p.nsr > nsrMax) nsrMax = p.nsr;
+        }
+        if (p.date) {
+          if (periodoInicio === null || p.date < periodoInicio) periodoInicio = p.date;
+          if (periodoFim === null || p.date > periodoFim) periodoFim = p.date;
+        }
+      }
       setImportPreview({
         fileName: file.name,
         afdText,
@@ -1324,10 +1336,10 @@ export function AdminPontoEletronico() {
         cnpj,
         totalLinhas: lines.length,
         totalMarcacoes: parsed.length,
-        nsrMin: nsrs.length ? Math.min(...nsrs) : null,
-        nsrMax: nsrs.length ? Math.max(...nsrs) : null,
-        periodoInicio: dates[0] || null,
-        periodoFim: dates[dates.length - 1] || null,
+        nsrMin,
+        nsrMax,
+        periodoInicio,
+        periodoFim,
         equipamentoId: "__none__",
       });
       setImportDialogOpen(true);
