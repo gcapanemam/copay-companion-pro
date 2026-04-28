@@ -2435,6 +2435,70 @@ export function AdminPontoEletronico() {
                 <div className="text-xs text-muted-foreground whitespace-nowrap">
                   {Object.keys(pisLinkMap).length} vínculo(s) pendente(s)
                 </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    if (!importPreview) return;
+                    const norm = (s: string) =>
+                      (s || "")
+                        .normalize("NFD")
+                        .replace(/[\u0300-\u036f]/g, "")
+                        .toLowerCase()
+                        .replace(/[^a-z0-9\s]/g, " ")
+                        .split(/\s+/)
+                        .filter((t) => t.length >= 2);
+                    const STOP = new Set(["da", "de", "do", "das", "dos", "e", "di", "du"]);
+                    const tokens = (s: string) => norm(s).filter((t) => !STOP.has(t));
+                    const score = (a: string[], b: string[]) => {
+                      if (!a.length || !b.length) return 0;
+                      const setB = new Set(b);
+                      let inter = 0;
+                      for (const t of a) if (setB.has(t)) inter++;
+                      const uni = new Set([...a, ...b]).size;
+                      return uni ? inter / uni : 0;
+                    };
+                    // CPFs já tomados (no mapa atual ou já com PIS gravado)
+                    const tomados = new Set<string>(Object.values(pisLinkMap).filter(Boolean));
+                    const candidatos = funcionariosMini
+                      .filter((f) => f.cpf && !tomados.has(f.cpf))
+                      .map((f) => ({ cpf: f.cpf, nome: f.nome_completo || "", toks: tokens(f.nome_completo || "") }));
+                    const novos: Record<string, string> = {};
+                    let casados = 0;
+                    for (const p of importPreview.pisDistintos) {
+                      if (pisLinkMap[p.pis]) continue;
+                      const nomeAfd = p.nomeAfd || "";
+                      if (!nomeAfd) continue;
+                      const toksA = tokens(nomeAfd);
+                      if (!toksA.length) continue;
+                      let melhor: { cpf: string; s: number } | null = null;
+                      for (const c of candidatos) {
+                        if (novos[p.pis]) break;
+                        if (Object.values(novos).includes(c.cpf)) continue;
+                        const s = score(toksA, c.toks);
+                        if (s >= 0.6 && (!melhor || s > melhor.s)) melhor = { cpf: c.cpf, s };
+                      }
+                      if (melhor) {
+                        novos[p.pis] = melhor.cpf;
+                        casados++;
+                      }
+                    }
+                    if (casados === 0) {
+                      toast({
+                        title: "Nenhuma sugestão encontrada",
+                        description: "Não houve nomes com similaridade ≥ 60%. Vincule manualmente.",
+                      });
+                      return;
+                    }
+                    setPisLinkMap((prev) => ({ ...prev, ...novos }));
+                    toast({
+                      title: "Auto-vínculo concluído",
+                      description: `${casados} sugestão(ões) preenchida(s). Revise antes de salvar.`,
+                    });
+                  }}
+                >
+                  Auto-vincular por nome
+                </Button>
               </div>
 
               <div className="max-h-[55vh] overflow-auto rounded-md border border-border">
