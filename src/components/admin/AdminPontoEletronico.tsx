@@ -2374,13 +2374,7 @@ export function AdminPontoEletronico() {
                       size="sm"
                       variant="secondary"
                       onClick={() => {
-                        // Pré-popular o mapa com PIS já cadastrados em admissoes
-                        const seed: Record<string, string> = {};
-                        const pisToCpfBd = new Map<string, string>();
-                        for (const f of funcionariosMini) {
-                          // funcionariosMini não traz numero_pis; deixamos vazio.
-                        }
-                        setPisLinkMap(seed);
+                        setPisLinkMap({});
                         setPisLinkBusca("");
                         setPisLinkOpen(true);
                       }}
