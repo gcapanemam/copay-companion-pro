@@ -1233,7 +1233,8 @@ export function AdminPontoEletronico() {
       else if (existing === undefined) cpfSuffix9ToCpf.set(suffix9, cpf);
     }
 
-    const parsed = parseAfd(afdText);
+    const parseResult = parseAfd(afdText);
+    const parsed = parseResult.marks;
     if (parsed.length === 0) {
       const preview = summarizeBody(afdText);
       const hint = preview ? `Conteúdo recebido: ${preview}` : "Conteúdo vazio";
@@ -1243,15 +1244,26 @@ export function AdminPontoEletronico() {
     let cpfsNaoEncontrados = 0;
     let cpfResolvido = 0;
     let pisResolvido = 0;
+    const amostrasNaoMapeadas: string[] = [];
     for (const p of parsed) {
       const resolved = resolveCpfFromRest(p.rest, cpfsValidos, pisToCpf, afdPisToCpf, cpfSuffix9ToCpf);
       if (!resolved) {
         cpfsNaoEncontrados++;
+        if (amostrasNaoMapeadas.length < 50) amostrasNaoMapeadas.push(p.rest.slice(0, 60));
         continue;
       }
       if (resolved.tipo === "cpf") cpfResolvido++;
       else pisResolvido++;
       marks.push({ nsr: p.nsr, dt: p.dt, cpf: resolved.cpf, date: p.date, time: p.time });
+    }
+    if (amostrasNaoMapeadas.length > 0) {
+      console.warn("[AFD sync] CPFs/PIS não mapeados (amostra):", amostrasNaoMapeadas);
+    }
+    if (parseResult.linhasTipo3Falhadas > 0) {
+      console.warn(
+        `[AFD sync] ${parseResult.linhasTipo3Falhadas} linha(s) tipo 3 com formato não reconhecido. Amostras:`,
+        parseResult.amostrasFalhadas,
+      );
     }
 
     const existingByKey = new Map<string, RegistroPonto>();
