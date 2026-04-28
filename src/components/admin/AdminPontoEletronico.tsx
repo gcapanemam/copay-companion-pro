@@ -631,7 +631,7 @@ export function AdminPontoEletronico() {
         .select("*")
         .order("data", { ascending: false })
         .order("cpf", { ascending: true })
-        .limit(500);
+        .limit(2000);
 
       if (filtroEquipamento !== "__all__") q = q.eq("equipamento_id", filtroEquipamento);
       if (dataDe) q = q.gte("data", dataDe);
