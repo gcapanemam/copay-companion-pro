@@ -629,7 +629,13 @@ export function AdminPontoEletronico() {
     periodoInicio: string | null;
     periodoFim: string | null;
     equipamentoId: string;
+    pisDistintos: Array<{ pis: string; nomeAfd: string | null; ocorrencias: number }>;
   } | null>(null);
+  const [pisLinkOpen, setPisLinkOpen] = useState(false);
+  const [pisLinkSaving, setPisLinkSaving] = useState(false);
+  const [pisLinkBusca, setPisLinkBusca] = useState("");
+  // Mapa em memória PIS -> CPF escolhido nesta sessão (antes de salvar)
+  const [pisLinkMap, setPisLinkMap] = useState<Record<string, string>>({});
 
   const { data: equipamentos = [], isLoading: loadingEquip } = useQuery({
     queryKey: ["equipamentos_ponto"],
