@@ -1485,22 +1485,38 @@ export function AdminPontoEletronico() {
         else if (existing === undefined) cpfSuffix9ToCpf.set(suffix9, cpf);
       }
 
-      const parsed = parseAfd(afdText);
+      const parseResult = parseAfd(afdText);
+      const parsed = parseResult.marks;
       const marks: AfdMark[] = [];
       let cpfsNaoEncontrados = 0;
+      const amostrasNaoMapeadas: string[] = [];
       for (const p of parsed) {
         const resolved = resolveCpfFromRest(p.rest, cpfsValidos, pisToCpf, afdPisToCpf, cpfSuffix9ToCpf);
         if (!resolved) {
           cpfsNaoEncontrados++;
+          if (amostrasNaoMapeadas.length < 50) amostrasNaoMapeadas.push(p.rest.slice(0, 60));
           continue;
         }
         marks.push({ nsr: p.nsr, dt: p.dt, cpf: resolved.cpf, date: p.date, time: p.time });
       }
 
+      if (amostrasNaoMapeadas.length > 0) {
+        console.warn(
+          `[AFD import] ${cpfsNaoEncontrados} marcação(ões) sem CPF/PIS mapeado em admissões. Amostras (rest):`,
+          amostrasNaoMapeadas,
+        );
+      }
+      if (parseResult.linhasTipo3Falhadas > 0) {
+        console.warn(
+          `[AFD import] ${parseResult.linhasTipo3Falhadas} linha(s) tipo 3 ignoradas no parse. Amostras:`,
+          parseResult.amostrasFalhadas,
+        );
+      }
+
       if (marks.length === 0) {
         toast({
           title: "Nenhuma marcação aproveitada",
-          description: `${parsed.length} linha(s) lida(s) • ${cpfsNaoEncontrados} CPF(s) não mapeado(s) em admissões.`,
+          description: `${parsed.length} marcação(ões) tipo 3 lida(s) • ${cpfsNaoEncontrados} CPF(s) não mapeado(s) em admissões.`,
           variant: "destructive",
         });
         setImporting(false);
@@ -1550,11 +1566,15 @@ export function AdminPontoEletronico() {
       // Importação manual NÃO atualiza ultimo_nsr (evita travar sync incremental futuro)
 
       const partes = [
-        `${records.length} dia(s) importado(s)`,
-        `${marks.length} marcação(ões)`,
+        `${parseResult.linhasTotais} linha(s)`,
+        `${parseResult.linhasTipo3} tipo 3`,
+        `${parsed.length} marcação(ões) parseada(s)`,
+        `${marks.length} mapeada(s)`,
+        `${records.length} dia(s)`,
       ];
-      if (cpfsNaoEncontrados) partes.push(`${cpfsNaoEncontrados} não mapeada(s)`);
-      if (marcacoesExcedentes) partes.push(`${marcacoesExcedentes} excedente(s) (>6 batidas/dia)`);
+      if (parseResult.linhasTipo3Falhadas) partes.push(`${parseResult.linhasTipo3Falhadas} tipo 3 ignorada(s)`);
+      if (cpfsNaoEncontrados) partes.push(`${cpfsNaoEncontrados} sem CPF`);
+      if (marcacoesExcedentes) partes.push(`${marcacoesExcedentes} batidas extras preservadas em "marcacoes_brutas"`);
       toast({
         title: `AFD importado: ${fileName}`,
         description: partes.join(" • "),
