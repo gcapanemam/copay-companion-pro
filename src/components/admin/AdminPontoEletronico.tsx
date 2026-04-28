@@ -1478,7 +1478,7 @@ export function AdminPontoEletronico() {
       if (parsed.length === 0) {
         toast({
           title: "Arquivo não reconhecido",
-          description: `Nenhuma marcação tipo 3 encontrada (${parseResult.linhasTipo3} linha(s) tipo 3, ${parseResult.linhasTipo3Falhadas} falharam).`,
+          description: `Nenhuma marcação tipo 3 encontrada (T3: ${parseResult.contagemPorTipo["3"] ?? 0}, falhadas: ${parseResult.linhasTipo3Falhadas}).`,
           variant: "destructive",
         });
         return;
