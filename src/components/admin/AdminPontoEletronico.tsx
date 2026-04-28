@@ -629,7 +629,13 @@ export function AdminPontoEletronico() {
     periodoInicio: string | null;
     periodoFim: string | null;
     equipamentoId: string;
+    pisDistintos: Array<{ pis: string; nomeAfd: string | null; ocorrencias: number }>;
   } | null>(null);
+  const [pisLinkOpen, setPisLinkOpen] = useState(false);
+  const [pisLinkSaving, setPisLinkSaving] = useState(false);
+  const [pisLinkBusca, setPisLinkBusca] = useState("");
+  // Mapa em memória PIS -> CPF escolhido nesta sessão (antes de salvar)
+  const [pisLinkMap, setPisLinkMap] = useState<Record<string, string>>({});
 
   const { data: equipamentos = [], isLoading: loadingEquip } = useQuery({
     queryKey: ["equipamentos_ponto"],
@@ -1504,6 +1510,20 @@ export function AdminPontoEletronico() {
           if (periodoFim === null || p.date > periodoFim) periodoFim = p.date;
         }
       }
+      // Construir lista de PIS distintos com nome do tipo 5 (quando existir)
+      const empByPis = new Map<string, string>();
+      for (const e of parseResult.employees) {
+        if (!empByPis.has(e.pis)) empByPis.set(e.pis, e.name);
+      }
+      const pisCount = new Map<string, number>();
+      for (const m of parsed) {
+        if (!m.pis) continue;
+        pisCount.set(m.pis, (pisCount.get(m.pis) ?? 0) + 1);
+      }
+      const pisDistintos = Array.from(pisCount.entries())
+        .map(([pis, ocorrencias]) => ({ pis, nomeAfd: empByPis.get(pis) ?? null, ocorrencias }))
+        .sort((a, b) => b.ocorrencias - a.ocorrencias);
+
       setImportPreview({
         fileName: file.name,
         afdText,
@@ -1516,6 +1536,7 @@ export function AdminPontoEletronico() {
         periodoInicio,
         periodoFim,
         equipamentoId: "__none__",
+        pisDistintos,
       });
       setImportDialogOpen(true);
     } catch (err: unknown) {
@@ -2341,6 +2362,32 @@ export function AdminPontoEletronico() {
                 A importação manual mescla com registros existentes (cpf+data) e <strong>não</strong> altera o
                 cursor de sincronização do equipamento.
               </p>
+
+              {importPreview.pisDistintos.length > 0 && (
+                <div className="rounded-md border border-border bg-muted/40 p-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs">
+                      <strong>{importPreview.pisDistintos.length}</strong> PIS distinto(s) encontrado(s) no AFD.
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setPisLinkMap({});
+                        setPisLinkBusca("");
+                        setPisLinkOpen(true);
+                      }}
+                    >
+                      Vincular PIS ↔ CPF
+                    </Button>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Use esta tela para indicar manualmente qual funcionário corresponde a cada PIS.
+                    Os vínculos são gravados em <code>admissoes.numero_pis</code>.
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
@@ -2357,6 +2404,157 @@ export function AdminPontoEletronico() {
             <Button onClick={confirmManualImport} disabled={importing || !importPreview}>
               {importing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileUp className="h-4 w-4 mr-1" />}
               Confirmar importação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de vinculação manual PIS ↔ CPF */}
+      <Dialog
+        open={pisLinkOpen}
+        onOpenChange={(o) => { if (!pisLinkSaving) setPisLinkOpen(o); }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Vincular PIS ↔ Funcionário</DialogTitle>
+            <DialogDescription>
+              Selecione o funcionário correspondente a cada PIS. Os vínculos são salvos em
+              {" "}<code>admissoes.numero_pis</code>{" "}e usados na importação imediatamente.
+            </DialogDescription>
+          </DialogHeader>
+
+          {importPreview && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Filtrar por PIS ou nome do AFD…"
+                  value={pisLinkBusca}
+                  onChange={(e) => setPisLinkBusca(e.target.value)}
+                />
+                <div className="text-xs text-muted-foreground whitespace-nowrap">
+                  {Object.keys(pisLinkMap).length} vínculo(s) pendente(s)
+                </div>
+              </div>
+
+              <div className="max-h-[55vh] overflow-auto rounded-md border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[150px]">PIS</TableHead>
+                      <TableHead>Nome no AFD</TableHead>
+                      <TableHead className="w-[80px] text-right">Marc.</TableHead>
+                      <TableHead className="w-[320px]">Funcionário</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(() => {
+                      const term = pisLinkBusca.trim().toLowerCase();
+                      const lista = importPreview.pisDistintos.filter((p) => {
+                        if (!term) return true;
+                        return p.pis.includes(term) || (p.nomeAfd || "").toLowerCase().includes(term);
+                      }).slice(0, 500);
+                      if (lista.length === 0) {
+                        return (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center text-muted-foreground text-sm py-6">
+                              Nenhum PIS corresponde ao filtro.
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+                      return lista.map((p) => (
+                        <TableRow key={p.pis}>
+                          <TableCell className="font-mono text-xs">{p.pis}</TableCell>
+                          <TableCell className="text-xs">{p.nomeAfd || "—"}</TableCell>
+                          <TableCell className="text-right text-xs">{p.ocorrencias}</TableCell>
+                          <TableCell>
+                            <Select
+                              value={pisLinkMap[p.pis] || ""}
+                              onValueChange={(v) =>
+                                setPisLinkMap((prev) => {
+                                  const next = { ...prev };
+                                  if (!v) delete next[p.pis];
+                                  else next[p.pis] = v;
+                                  return next;
+                                })
+                              }
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Escolher funcionário…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(() => {
+                                  const sugestaoTerm = (p.nomeAfd || "").toLowerCase();
+                                  const ordenados = [...funcionariosMini].sort((a, b) => {
+                                    if (sugestaoTerm) {
+                                      const ai = (a.nome_completo || "").toLowerCase().includes(sugestaoTerm) ? 0 : 1;
+                                      const bi = (b.nome_completo || "").toLowerCase().includes(sugestaoTerm) ? 0 : 1;
+                                      if (ai !== bi) return ai - bi;
+                                    }
+                                    return (a.nome_completo || "").localeCompare(b.nome_completo || "", "pt-BR");
+                                  }).slice(0, 200);
+                                  return ordenados.map((f) => (
+                                    <SelectItem key={f.cpf} value={f.cpf}>
+                                      {f.nome_completo || "—"} • {formatCpf(f.cpf)}
+                                    </SelectItem>
+                                  ));
+                                })()}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      ));
+                    })()}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Dica: o sistema sugere primeiro funcionários cujo nome contém o "Nome no AFD".
+                Mostrando até 500 PIS e 200 funcionários por seletor — use o filtro para refinar.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPisLinkOpen(false)} disabled={pisLinkSaving}>
+              Fechar
+            </Button>
+            <Button
+              onClick={async () => {
+                const entries = Object.entries(pisLinkMap).filter(([, cpf]) => cpf);
+                if (entries.length === 0) {
+                  toast({ title: "Nenhum vínculo selecionado", variant: "destructive" });
+                  return;
+                }
+                setPisLinkSaving(true);
+                try {
+                  // Atualiza numero_pis em admissoes em lote (uma chamada por CPF)
+                  let ok = 0;
+                  let fail = 0;
+                  for (const [pis, cpf] of entries) {
+                    const { error } = await supabase
+                      .from("admissoes")
+                      .update({ numero_pis: pis })
+                      .eq("cpf", cpf);
+                    if (error) { fail++; console.error("[pis link]", cpf, error); }
+                    else ok++;
+                  }
+                  await qc.invalidateQueries({ queryKey: ["admissoes_mini_ponto"] });
+                  toast({
+                    title: "Vínculos salvos",
+                    description: `${ok} vínculo(s) gravado(s)${fail ? ` • ${fail} falha(s)` : ""}. Agora clique em "Confirmar importação".`,
+                  });
+                  setPisLinkOpen(false);
+                } finally {
+                  setPisLinkSaving(false);
+                }
+              }}
+              disabled={pisLinkSaving || Object.keys(pisLinkMap).length === 0}
+            >
+              {pisLinkSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+              Salvar vínculos
             </Button>
           </DialogFooter>
         </DialogContent>
