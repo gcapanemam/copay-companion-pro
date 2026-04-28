@@ -520,6 +520,8 @@ function groupMarksIntoDailyRecords(
       nsr: Math.max(existing?.nsr ?? 0, lastNew?.nsr ?? 0) || (lastNew?.nsr ?? null),
       data_hora: lastDt ? lastDt.toISOString() : null,
       tipo_marcacao: existing?.tipo_marcacao ?? null,
+      // Preserva todas as batidas originais do dia (mesmo as que excedem 6 slots)
+      marcacoes_brutas: todas.length > 0 ? todas : null,
     });
   }
 
