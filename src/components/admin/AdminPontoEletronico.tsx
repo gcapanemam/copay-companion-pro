@@ -1673,16 +1673,18 @@ export function AdminPontoEletronico() {
 
       // Importação manual NÃO atualiza ultimo_nsr (evita travar sync incremental futuro)
 
+      const ct = parseResult.contagemPorTipo;
       const partes = [
         `${parseResult.linhasTotais} linha(s)`,
-        `${parseResult.linhasTipo3} tipo 3`,
+        `T1:${ct["1"] ?? 0} T2:${ct["2"] ?? 0} T3:${ct["3"] ?? 0} T4:${ct["4"] ?? 0} T5:${ct["5"] ?? 0} T9:${ct["9"] ?? 0}`,
         `${parsed.length} marcação(ões) parseada(s)`,
         `${marks.length} mapeada(s)`,
         `${records.length} dia(s)`,
       ];
-      if (parseResult.linhasTipo3Falhadas) partes.push(`${parseResult.linhasTipo3Falhadas} tipo 3 ignorada(s)`);
-      if (cpfsNaoEncontrados) partes.push(`${cpfsNaoEncontrados} sem CPF`);
-      if (marcacoesExcedentes) partes.push(`${marcacoesExcedentes} batidas extras preservadas em "marcacoes_brutas"`);
+      if (parseResult.linhasTipo3Falhadas) partes.push(`${parseResult.linhasTipo3Falhadas} tipo 3 com erro`);
+      if (ajustesIgnorados) partes.push(`${ajustesIgnorados} ajuste(s) tipo 4 ignorado(s)`);
+      if (cpfsNaoEncontrados) partes.push(`${cpfsNaoEncontrados} sem PIS mapeado`);
+      if (marcacoesExcedentes) partes.push(`${marcacoesExcedentes} batidas extras em "marcacoes_brutas"`);
       toast({
         title: `AFD importado: ${fileName}`,
         description: partes.join(" • "),
