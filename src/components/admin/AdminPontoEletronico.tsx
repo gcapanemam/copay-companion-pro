@@ -1510,6 +1510,20 @@ export function AdminPontoEletronico() {
           if (periodoFim === null || p.date > periodoFim) periodoFim = p.date;
         }
       }
+      // Construir lista de PIS distintos com nome do tipo 5 (quando existir)
+      const empByPis = new Map<string, string>();
+      for (const e of parseResult.employees) {
+        if (!empByPis.has(e.pis)) empByPis.set(e.pis, e.name);
+      }
+      const pisCount = new Map<string, number>();
+      for (const m of parsed) {
+        if (!m.pis) continue;
+        pisCount.set(m.pis, (pisCount.get(m.pis) ?? 0) + 1);
+      }
+      const pisDistintos = Array.from(pisCount.entries())
+        .map(([pis, ocorrencias]) => ({ pis, nomeAfd: empByPis.get(pis) ?? null, ocorrencias }))
+        .sort((a, b) => b.ocorrencias - a.ocorrencias);
+
       setImportPreview({
         fileName: file.name,
         afdText,
@@ -1522,6 +1536,7 @@ export function AdminPontoEletronico() {
         periodoInicio,
         periodoFim,
         equipamentoId: "__none__",
+        pisDistintos,
       });
       setImportDialogOpen(true);
     } catch (err: unknown) {
