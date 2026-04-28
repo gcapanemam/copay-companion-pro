@@ -1279,22 +1279,23 @@ export function AdminPontoEletronico() {
       }
     }
 
-    const { data: admissoes } = await supabase.from("admissoes").select("cpf, numero_pis");
+    const { data: admissoes } = await supabase.from("admissoes").select("cpf, numero_pis, nome_completo");
     const cpfsValidos = new Set<string>();
     const pisToCpf = new Map<string, string>();
+    const admissoesByName = new Map<string, string>();
     (admissoes as AdmissaoRow[] | null || []).forEach((a) => {
       const c = normalizeCpf(a.cpf);
       if (c) cpfsValidos.add(c);
       const pis = String(a.numero_pis ?? "").replace(/\D/g, "");
-      if (pis && c) pisToCpf.set(pis, c);
+      if (pis && c) {
+        pisToCpf.set(pis, c);
+        if (pis.length === 11) pisToCpf.set(`0${pis}`, c);
+      }
+      if (a.nome_completo && c) {
+        const key = normalizeName(a.nome_completo);
+        if (key) admissoesByName.set(key, c);
+      }
     });
-    const cpfSuffix9ToCpf = new Map<string, string | null>();
-    for (const cpf of cpfsValidos) {
-      const suffix9 = cpf.slice(-9);
-      const existing = cpfSuffix9ToCpf.get(suffix9);
-      if (existing && existing !== cpf) cpfSuffix9ToCpf.set(suffix9, null);
-      else if (existing === undefined) cpfSuffix9ToCpf.set(suffix9, cpf);
-    }
 
     const parseResult = parseAfd(afdText);
     const parsed = parseResult.marks;
@@ -1303,24 +1304,42 @@ export function AdminPontoEletronico() {
       const hint = preview ? `Conteúdo recebido: ${preview}` : "Conteúdo vazio";
       throw new Error(`AFD retornou conteúdo em formato inesperado. ${hint}`);
     }
+
+    // Enriquece o mapa PIS→CPF com os empregados (tipo 5) do próprio AFD,
+    // resolvendo por nome quando o PIS não está cadastrado em admissões.
+    const { map: empMap, resolvidos: empResolvidos } = buildAfdPisToCpfFromEmployees(
+      parseResult.employees,
+      admissoesByName,
+    );
+    for (const [k, v] of empMap.entries()) {
+      if (!afdPisToCpf.has(k)) afdPisToCpf.set(k, v);
+    }
+    if (empResolvidos > 0) {
+      console.info(`[AFD sync] Tipo 5: ${empResolvidos} empregado(s) mapeados PIS→CPF via nome.`);
+    }
+
     const marks: AfdMark[] = [];
     let cpfsNaoEncontrados = 0;
-    let cpfResolvido = 0;
     let pisResolvido = 0;
+    let ajustesIgnorados = 0;
     const amostrasNaoMapeadas: string[] = [];
     for (const p of parsed) {
-      const resolved = resolveCpfFromRest(p.rest, cpfsValidos, pisToCpf, afdPisToCpf, cpfSuffix9ToCpf);
-      if (!resolved) {
-        cpfsNaoEncontrados++;
-        if (amostrasNaoMapeadas.length < 50) amostrasNaoMapeadas.push(p.rest.slice(0, 60));
+      if (p.origem === "tipo4_ajuste") {
+        // Ajustes (tipo 4) não têm PIS — ignoramos no fluxo principal.
+        ajustesIgnorados++;
         continue;
       }
-      if (resolved.tipo === "cpf") cpfResolvido++;
-      else pisResolvido++;
+      const resolved = resolvePisToCpf(p.pis, cpfsValidos, pisToCpf, afdPisToCpf);
+      if (!resolved) {
+        cpfsNaoEncontrados++;
+        if (amostrasNaoMapeadas.length < 50) amostrasNaoMapeadas.push(`PIS=${p.pis ?? "—"} ${p.date} ${p.time}`);
+        continue;
+      }
+      pisResolvido++;
       marks.push({ nsr: p.nsr, dt: p.dt, cpf: resolved.cpf, date: p.date, time: p.time });
     }
     if (amostrasNaoMapeadas.length > 0) {
-      console.warn("[AFD sync] CPFs/PIS não mapeados (amostra):", amostrasNaoMapeadas);
+      console.warn("[AFD sync] PIS não mapeados (amostra):", amostrasNaoMapeadas);
     }
     if (parseResult.linhasTipo3Falhadas > 0) {
       console.warn(
@@ -1328,6 +1347,9 @@ export function AdminPontoEletronico() {
         parseResult.amostrasFalhadas,
       );
     }
+    console.info("[AFD sync] Contagem por tipo:", parseResult.contagemPorTipo, `(ajustes tipo 4 ignorados: ${ajustesIgnorados})`);
+    const cpfResolvido = 0; // mantido para compatibilidade do retorno
+    void cpfResolvido;
 
     const existingByKey = new Map<string, RegistroPonto>();
     if (marks.length > 0) {
