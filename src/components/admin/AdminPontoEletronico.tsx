@@ -1387,7 +1387,7 @@ export function AdminPontoEletronico() {
         toast({ title: "Arquivo vazio", variant: "destructive" });
         return;
       }
-      const lines = afdText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      
       const parseResult = parseAfd(afdText);
       const parsed = parseResult.marks;
       if (parsed.length === 0) {
