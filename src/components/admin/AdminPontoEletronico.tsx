@@ -225,7 +225,7 @@ function buildBaseUrl(host: string, porta: number | null): string {
   return `${scheme}://${h}:${p}`;
 }
 
-type AdmissaoRow = { cpf: string | null; numero_pis: string | null };
+type AdmissaoRow = { cpf: string | null; numero_pis: string | null; nome_completo: string | null };
 
 type RegistroPontoUpsert = {
   cpf: string;
@@ -281,161 +281,224 @@ async function localProxyFetch(url: string, init: { method: string; headers: Rec
   return res;
 }
 
-function resolveCpfFromRest(
-  rest: string,
+// ============================================================================
+// Resolução de CPF a partir de um PIS lido do AFD.
+// Tenta na ordem:
+//   1. PIS exato → CPF nas admissões
+//   2. PIS sem zero à esquerda → CPF nas admissões
+//   3. PIS no mapa derivado do tipo 5 do AFD (PIS↔CPF resolvido por nome)
+// ============================================================================
+function resolvePisToCpf(
+  pis: string | null,
   cpfsValidos: Set<string>,
   pisToCpf: Map<string, string>,
   afdPisToCpf: Map<string, string>,
-  cpfSuffix9ToCpf: Map<string, string | null>,
-): { cpf: string; tipo: "cpf" | "pis" } | null {
-  const seqs = [...String(rest || "").matchAll(/\d{9,20}/g)].map((m) => m[0]);
-  for (const raw of seqs) {
-    const digits = raw.replace(/\D/g, "");
-
-    const tryPis = (pisRaw: string) => {
-      const p = String(pisRaw || "").replace(/\D/g, "");
-      if (p.length !== 12) return null;
-      const pisCandidate = p.startsWith("0") ? p.slice(1) : p;
-      const mapped = pisToCpf.get(p) || pisToCpf.get(pisCandidate) || afdPisToCpf.get(p) || afdPisToCpf.get(pisCandidate);
-      if (!mapped) return null;
-      if (cpfsValidos.size === 0 || cpfsValidos.has(mapped)) return { cpf: mapped, tipo: "pis" as const };
-      return null;
-    };
-
-    if (digits.length >= 12) {
-      const candidates = Array.from(new Set([digits.slice(0, 12), digits.slice(-12), digits.length === 12 ? digits : ""])).filter(Boolean);
-      for (const c of candidates) {
-        const mapped = tryPis(c);
-        if (mapped) return mapped;
-      }
-    }
-
-    if (digits.length >= 11) {
-      const cpfCandidate = normalizeCpf(digits.slice(-11));
-      if (!cpfCandidate) continue;
-      if (cpfsValidos.size === 0) {
-        if (digits.length === 11 || digits.startsWith("0000")) return { cpf: cpfCandidate, tipo: "cpf" };
-      } else if (cpfsValidos.has(cpfCandidate)) {
-        return { cpf: cpfCandidate, tipo: "cpf" };
-      }
-    }
-
-    if (digits.length >= 9) {
-      const suffix9 = digits.slice(-9);
-      const mapped = cpfSuffix9ToCpf.get(suffix9);
-      if (mapped && (cpfsValidos.size === 0 || cpfsValidos.has(mapped))) return { cpf: mapped, tipo: "cpf" };
+): { cpf: string; tipo: "pis" } | null {
+  if (!pis) return null;
+  const p = String(pis).replace(/\D/g, "");
+  if (p.length < 11) return null;
+  const p12 = p.length === 11 ? `0${p}` : p.slice(-12);
+  const p11 = p12.startsWith("0") ? p12.slice(1) : p12;
+  for (const c of [p12, p11]) {
+    const mapped = pisToCpf.get(c) || afdPisToCpf.get(c);
+    if (mapped && (cpfsValidos.size === 0 || cpfsValidos.has(mapped))) {
+      return { cpf: mapped, tipo: "pis" };
     }
   }
   return null;
 }
 
+// Normaliza nome para comparação (sem acentos, lowercase, espaços simples)
+function normalizeName(s: string): string {
+  return String(s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// ============================================================================
+// Parser AFD conforme Portarias MTE 1.510/2009 e 671/2021.
+//
+//   Tipo 1 - Header:    NSR(9)+T(1)+identType(1)+identNum(14)+CEI(12)+nome(150)+serial(17)+dataIni(8)+dataFim(8)+dataGer(8)+horaGer(4)
+//   Tipo 2 - Alteração de empresa
+//   Tipo 3 - Marcação:
+//     Portaria 1510:  NSR(9)+T(1)+DDMMYYYY(8)+HHMM(4)+PIS(12)                        = 34 chars
+//     Portaria 671:   NSR(9)+T(1)+ISO8601(24:AAAA-MM-DDThh:mm:00±HHMM)+PIS(12)+CRC(4)
+//   Tipo 4 - Ajuste:    NSR(9)+T(1)+dataAntes(8)+horaAntes(4)+dataDepois(8)+horaDepois(4)
+//   Tipo 5 - Empregado: NSR(9)+T(1)+data(8)+hora(4)+operacao(1)+PIS(12)+nome(52)
+//   Tipo 9 - Trailer
+// ============================================================================
+
+type AfdMarkParsed = {
+  nsr: number;
+  dt: Date;
+  date: string; // ISO YYYY-MM-DD
+  time: string; // HH:MM
+  pis: string | null;
+  origem: "tipo3" | "tipo4_ajuste";
+};
+
+type AfdEmployeeRow = { pis: string; name: string };
+
 type ParseAfdResult = {
-  marks: Array<{ nsr: number; dt: Date; date: string; time: string; rest: string }>;
+  marks: AfdMarkParsed[];
+  employees: AfdEmployeeRow[];
   linhasTotais: number;
-  linhasTipo3: number;
+  contagemPorTipo: Record<string, number>;
   linhasTipo3Falhadas: number;
   amostrasFalhadas: string[];
 };
 
+function parseDdMmYyyy(s: string): { iso: string; valid: boolean } {
+  if (!/^\d{8}$/.test(s)) return { iso: "", valid: false };
+  const dd = s.slice(0, 2), mm = s.slice(2, 4), yyyy = s.slice(4, 8);
+  const ddN = Number(dd), mmN = Number(mm), yyyyN = Number(yyyy);
+  if (ddN < 1 || ddN > 31 || mmN < 1 || mmN > 12 || yyyyN < 1900 || yyyyN > 2999) {
+    return { iso: "", valid: false };
+  }
+  return { iso: `${yyyy}-${mm}-${dd}`, valid: true };
+}
+
+function parseHhMm(s: string): { hhmm: string; valid: boolean } {
+  if (!/^\d{4}$/.test(s)) return { hhmm: "", valid: false };
+  const hh = s.slice(0, 2), mi = s.slice(2, 4);
+  if (Number(hh) > 23 || Number(mi) > 59) return { hhmm: "", valid: false };
+  return { hhmm: `${hh}:${mi}`, valid: true };
+}
+
+function buildLocalDate(iso: string, hhmm: string): Date | null {
+  const dt = new Date(`${iso}T${hhmm}:00-03:00`);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
 function parseAfd(afdText: string): ParseAfdResult {
-  const marks: ParseAfdResult["marks"] = [];
-  // Remove BOM e normaliza linhas
-  const cleanText = String(afdText || "").replace(/^\uFEFF/, "");
+  const marks: AfdMarkParsed[] = [];
+  const employees: AfdEmployeeRow[] = [];
+  const cleanText = String(afdText || "").replace(/^\uFEFF/, "").replace(/^\uFFFE/, "");
   const rawLines = cleanText.split(/\r?\n/);
   let linhasTotais = 0;
-  let linhasTipo3 = 0;
+  const contagemPorTipo: Record<string, number> = {};
   let linhasTipo3Falhadas = 0;
   const amostrasFalhadas: string[] = [];
 
-  for (const line of rawLines) {
-    // Normaliza espaços/tabs internos preservando estrutura geral
-    const trimmed = String(line || "").replace(/\s+$/g, "").replace(/^\s+/g, "");
-    if (!trimmed) continue;
+  for (const rawLine of rawLines) {
+    // Não aplicar trim() — espaços à direita são significativos no leiaute posicional.
+    const line = String(rawLine || "").replace(/\r$/, "");
+    if (line.length === 0) continue;
     linhasTotais++;
 
-    // Detecta tipo da linha: NSR(9) + tipo(1)
-    const tipoMatch = trimmed.match(/^(\d{9})(\d)/);
-    const isTipo3 = tipoMatch && tipoMatch[2] === "3";
-    if (isTipo3) linhasTipo3++;
+    if (line.length < 10 || !/^\d{10}/.test(line.slice(0, 10))) continue;
+    const nsrStr = line.slice(0, 9);
+    const tipo = line.slice(9, 10);
+    const nsr = Number(nsrStr);
+    contagemPorTipo[tipo] = (contagemPorTipo[tipo] ?? 0) + 1;
+    if (!Number.isFinite(nsr) || nsr <= 0) continue;
 
-    // Padrão 1: NSR(9) + tipo(1) + ISO 8601
-    const iso = trimmed.match(/^(\d{9})(\d)(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:?\d{2})(.*)$/);
-    if (iso) {
-      const [, nsr, tipo, ts, rest] = iso;
-      if (tipo !== "3") continue;
-      const nsrNum = Number(nsr);
-      if (!Number.isFinite(nsrNum) || nsrNum <= 0) continue;
-      // Normaliza fuso horário sem dois pontos (ex.: -0300 -> -03:00)
-      const tsNorm = ts.length === 24 ? `${ts.slice(0, 22)}:${ts.slice(22)}` : ts;
-      const dt = new Date(tsNorm);
-      if (Number.isNaN(dt.getTime())) {
-        if (isTipo3) {
+    // ===== TIPO 3 — Marcação =====
+    if (tipo === "3") {
+      const body = line.slice(10);
+
+      // Portaria 671: ISO-8601 + PIS(12) + CRC(4)
+      const isoMatch = body.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})([+-])(\d{2}):?(\d{2})(.*)$/);
+      if (isoMatch) {
+        const [, yyyy, mm, dd, hh, mi, ss, sign, tzH, tzM, rest] = isoMatch;
+        if (Number(mm) < 1 || Number(mm) > 12 || Number(dd) < 1 || Number(dd) > 31) {
           linhasTipo3Falhadas++;
-          if (amostrasFalhadas.length < 10) amostrasFalhadas.push(trimmed.slice(0, 80));
+          if (amostrasFalhadas.length < 10) amostrasFalhadas.push(line.slice(0, 80));
+          continue;
         }
+        const dt = new Date(`${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}${sign}${tzH}:${tzM}`);
+        if (Number.isNaN(dt.getTime())) {
+          linhasTipo3Falhadas++;
+          if (amostrasFalhadas.length < 10) amostrasFalhadas.push(line.slice(0, 80));
+          continue;
+        }
+        const restDigits = (rest || "").replace(/\D/g, "");
+        const pis = restDigits.length >= 12
+          ? restDigits.slice(0, 12)
+          : (restDigits.length === 11 ? `0${restDigits}` : null);
+        marks.push({ nsr, dt, date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${mi}`, pis, origem: "tipo3" });
         continue;
       }
-      const date = tsNorm.slice(0, 10);
-      const time = tsNorm.slice(11, 16);
-      marks.push({ nsr: nsrNum, dt, date, time, rest: rest || "" });
+
+      // Portaria 1510: DDMMYYYY(8) + HHMM(4) + PIS(12)
+      if (body.length >= 24 && /^\d{24}/.test(body)) {
+        const { iso, valid: dataOk } = parseDdMmYyyy(body.slice(0, 8));
+        const { hhmm, valid: horaOk } = parseHhMm(body.slice(8, 12));
+        const pisStr = body.slice(12, 24);
+        if (!dataOk || !horaOk) {
+          linhasTipo3Falhadas++;
+          if (amostrasFalhadas.length < 10) amostrasFalhadas.push(line.slice(0, 80));
+          continue;
+        }
+        const dt = buildLocalDate(iso, hhmm);
+        if (!dt) {
+          linhasTipo3Falhadas++;
+          if (amostrasFalhadas.length < 10) amostrasFalhadas.push(line.slice(0, 80));
+          continue;
+        }
+        marks.push({ nsr, dt, date: iso, time: hhmm, pis: pisStr, origem: "tipo3" });
+        continue;
+      }
+
+      linhasTipo3Falhadas++;
+      if (amostrasFalhadas.length < 10) amostrasFalhadas.push(line.slice(0, 80));
       continue;
     }
 
-    // Padrão 2: NSR(9) + tipo(1) + DDMMYYYYHHMMSS
-    const compact = trimmed.match(/^(\d{9})(\d)(\d{2})(\d{2})(\d{4})(\d{2})(\d{2})(\d{2})(.*)$/);
-    if (compact) {
-      const [, nsr, tipo, dd, mm, yyyy, hh, mi, ss, rest] = compact;
-      if (tipo !== "3") continue;
-      const ddNum = Number(dd);
-      const mmNum = Number(mm);
-      if (ddNum < 1 || ddNum > 31 || mmNum < 1 || mmNum > 12) {
-        linhasTipo3Falhadas++;
-        if (amostrasFalhadas.length < 10) amostrasFalhadas.push(trimmed.slice(0, 80));
-        continue;
-      }
-      const nsrNum = Number(nsr);
-      if (!Number.isFinite(nsrNum) || nsrNum <= 0) continue;
-      const dt = new Date(`${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}-03:00`);
-      if (Number.isNaN(dt.getTime())) {
-        linhasTipo3Falhadas++;
-        if (amostrasFalhadas.length < 10) amostrasFalhadas.push(trimmed.slice(0, 80));
-        continue;
-      }
-      const date = `${yyyy}-${mm}-${dd}`;
-      const time = `${hh}:${mi}`;
-      marks.push({ nsr: nsrNum, dt, date, time, rest: rest || "" });
-      continue;
-    }
-
-    // Padrão 3: NSR(9) + tipo(1) + DDMMYYYY + HHMM (sem segundos) — variante tolerante
-    if (isTipo3) {
-      const compact2 = trimmed.match(/^(\d{9})3(\d{2})(\d{2})(\d{4})(\d{2})(\d{2})(.*)$/);
-      if (compact2) {
-        const [, nsr, dd, mm, yyyy, hh, mi, rest] = compact2;
-        const nsrNum = Number(nsr);
-        const ddNum = Number(dd);
-        const mmNum = Number(mm);
-        if (Number.isFinite(nsrNum) && nsrNum > 0 && ddNum >= 1 && ddNum <= 31 && mmNum >= 1 && mmNum <= 12) {
-          const dt = new Date(`${yyyy}-${mm}-${dd}T${hh}:${mi}:00-03:00`);
-          if (!Number.isNaN(dt.getTime())) {
-            marks.push({
-              nsr: nsrNum,
-              dt,
-              date: `${yyyy}-${mm}-${dd}`,
-              time: `${hh}:${mi}`,
-              rest: rest || "",
-            });
-            continue;
+    // ===== TIPO 4 — Ajuste de marcação (sem PIS) =====
+    if (tipo === "4") {
+      const body = line.slice(10);
+      if (body.length >= 24 && /^\d{24}/.test(body)) {
+        const { iso, valid: dataOk } = parseDdMmYyyy(body.slice(12, 20));
+        const { hhmm, valid: horaOk } = parseHhMm(body.slice(20, 24));
+        if (dataOk && horaOk) {
+          const dt = buildLocalDate(iso, hhmm);
+          if (dt) {
+            marks.push({ nsr, dt, date: iso, time: hhmm, pis: null, origem: "tipo4_ajuste" });
           }
         }
       }
-      // Era tipo 3 mas nenhum padrão casou
-      linhasTipo3Falhadas++;
-      if (amostrasFalhadas.length < 10) amostrasFalhadas.push(trimmed.slice(0, 80));
+      continue;
+    }
+
+    // ===== TIPO 5 — Empregado (PIS↔Nome) =====
+    if (tipo === "5") {
+      const body = line.slice(10);
+      if (body.length >= 25) {
+        const pis = body.slice(13, 25);
+        const name = body.slice(25, Math.min(body.length, 25 + 52)).trimEnd();
+        if (/^\d{12}$/.test(pis) && name) {
+          employees.push({ pis, name });
+        }
+      }
+      continue;
     }
   }
 
-  return { marks, linhasTotais, linhasTipo3, linhasTipo3Falhadas, amostrasFalhadas };
+  return { marks, employees, linhasTotais, contagemPorTipo, linhasTipo3Falhadas, amostrasFalhadas };
+}
+
+// Constrói mapa PIS→CPF a partir do tipo 5 cruzando nome com admissões.
+function buildAfdPisToCpfFromEmployees(
+  employees: AfdEmployeeRow[],
+  admissoesByName: Map<string, string>,
+): { map: Map<string, string>; resolvidos: number } {
+  const map = new Map<string, string>();
+  let resolvidos = 0;
+  for (const e of employees) {
+    if (map.has(e.pis)) continue;
+    const cpf = admissoesByName.get(normalizeName(e.name));
+    if (cpf) {
+      map.set(e.pis, cpf);
+      if (e.pis.startsWith("0")) map.set(e.pis.slice(1), cpf);
+      resolvidos++;
+    }
+  }
+  return { map, resolvidos };
 }
 
 function groupMarksIntoDailyRecords(
@@ -1216,22 +1279,23 @@ export function AdminPontoEletronico() {
       }
     }
 
-    const { data: admissoes } = await supabase.from("admissoes").select("cpf, numero_pis");
+    const { data: admissoes } = await supabase.from("admissoes").select("cpf, numero_pis, nome_completo");
     const cpfsValidos = new Set<string>();
     const pisToCpf = new Map<string, string>();
+    const admissoesByName = new Map<string, string>();
     (admissoes as AdmissaoRow[] | null || []).forEach((a) => {
       const c = normalizeCpf(a.cpf);
       if (c) cpfsValidos.add(c);
       const pis = String(a.numero_pis ?? "").replace(/\D/g, "");
-      if (pis && c) pisToCpf.set(pis, c);
+      if (pis && c) {
+        pisToCpf.set(pis, c);
+        if (pis.length === 11) pisToCpf.set(`0${pis}`, c);
+      }
+      if (a.nome_completo && c) {
+        const key = normalizeName(a.nome_completo);
+        if (key) admissoesByName.set(key, c);
+      }
     });
-    const cpfSuffix9ToCpf = new Map<string, string | null>();
-    for (const cpf of cpfsValidos) {
-      const suffix9 = cpf.slice(-9);
-      const existing = cpfSuffix9ToCpf.get(suffix9);
-      if (existing && existing !== cpf) cpfSuffix9ToCpf.set(suffix9, null);
-      else if (existing === undefined) cpfSuffix9ToCpf.set(suffix9, cpf);
-    }
 
     const parseResult = parseAfd(afdText);
     const parsed = parseResult.marks;
@@ -1240,24 +1304,42 @@ export function AdminPontoEletronico() {
       const hint = preview ? `Conteúdo recebido: ${preview}` : "Conteúdo vazio";
       throw new Error(`AFD retornou conteúdo em formato inesperado. ${hint}`);
     }
+
+    // Enriquece o mapa PIS→CPF com os empregados (tipo 5) do próprio AFD,
+    // resolvendo por nome quando o PIS não está cadastrado em admissões.
+    const { map: empMap, resolvidos: empResolvidos } = buildAfdPisToCpfFromEmployees(
+      parseResult.employees,
+      admissoesByName,
+    );
+    for (const [k, v] of empMap.entries()) {
+      if (!afdPisToCpf.has(k)) afdPisToCpf.set(k, v);
+    }
+    if (empResolvidos > 0) {
+      console.info(`[AFD sync] Tipo 5: ${empResolvidos} empregado(s) mapeados PIS→CPF via nome.`);
+    }
+
     const marks: AfdMark[] = [];
     let cpfsNaoEncontrados = 0;
-    let cpfResolvido = 0;
     let pisResolvido = 0;
+    let ajustesIgnorados = 0;
     const amostrasNaoMapeadas: string[] = [];
     for (const p of parsed) {
-      const resolved = resolveCpfFromRest(p.rest, cpfsValidos, pisToCpf, afdPisToCpf, cpfSuffix9ToCpf);
-      if (!resolved) {
-        cpfsNaoEncontrados++;
-        if (amostrasNaoMapeadas.length < 50) amostrasNaoMapeadas.push(p.rest.slice(0, 60));
+      if (p.origem === "tipo4_ajuste") {
+        // Ajustes (tipo 4) não têm PIS — ignoramos no fluxo principal.
+        ajustesIgnorados++;
         continue;
       }
-      if (resolved.tipo === "cpf") cpfResolvido++;
-      else pisResolvido++;
+      const resolved = resolvePisToCpf(p.pis, cpfsValidos, pisToCpf, afdPisToCpf);
+      if (!resolved) {
+        cpfsNaoEncontrados++;
+        if (amostrasNaoMapeadas.length < 50) amostrasNaoMapeadas.push(`PIS=${p.pis ?? "—"} ${p.date} ${p.time}`);
+        continue;
+      }
+      pisResolvido++;
       marks.push({ nsr: p.nsr, dt: p.dt, cpf: resolved.cpf, date: p.date, time: p.time });
     }
     if (amostrasNaoMapeadas.length > 0) {
-      console.warn("[AFD sync] CPFs/PIS não mapeados (amostra):", amostrasNaoMapeadas);
+      console.warn("[AFD sync] PIS não mapeados (amostra):", amostrasNaoMapeadas);
     }
     if (parseResult.linhasTipo3Falhadas > 0) {
       console.warn(
@@ -1265,6 +1347,9 @@ export function AdminPontoEletronico() {
         parseResult.amostrasFalhadas,
       );
     }
+    console.info("[AFD sync] Contagem por tipo:", parseResult.contagemPorTipo, `(ajustes tipo 4 ignorados: ${ajustesIgnorados})`);
+    const cpfResolvido = 0; // mantido para compatibilidade do retorno
+    void cpfResolvido;
 
     const existingByKey = new Map<string, RegistroPonto>();
     if (marks.length > 0) {
@@ -1393,7 +1478,7 @@ export function AdminPontoEletronico() {
       if (parsed.length === 0) {
         toast({
           title: "Arquivo não reconhecido",
-          description: `Nenhuma marcação tipo 3 encontrada (${parseResult.linhasTipo3} linha(s) tipo 3, ${parseResult.linhasTipo3Falhadas} falharam).`,
+          description: `Nenhuma marcação tipo 3 encontrada (T3: ${parseResult.contagemPorTipo["3"] ?? 0}, falhadas: ${parseResult.linhasTipo3Falhadas}).`,
           variant: "destructive",
         });
         return;
@@ -1468,33 +1553,52 @@ export function AdminPontoEletronico() {
         }
       }
 
-      const { data: admissoes } = await supabase.from("admissoes").select("cpf, numero_pis");
+      const { data: admissoes } = await supabase.from("admissoes").select("cpf, numero_pis, nome_completo");
       const cpfsValidos = new Set<string>();
       const pisToCpf = new Map<string, string>();
+      const admissoesByName = new Map<string, string>();
       (admissoes as AdmissaoRow[] | null || []).forEach((a) => {
         const c = normalizeCpf(a.cpf);
         if (c) cpfsValidos.add(c);
         const pis = String(a.numero_pis ?? "").replace(/\D/g, "");
-        if (pis && c) pisToCpf.set(pis, c);
+        if (pis && c) {
+          pisToCpf.set(pis, c);
+          if (pis.length === 11) pisToCpf.set(`0${pis}`, c);
+        }
+        if (a.nome_completo && c) {
+          const key = normalizeName(a.nome_completo);
+          if (key) admissoesByName.set(key, c);
+        }
       });
-      const cpfSuffix9ToCpf = new Map<string, string | null>();
-      for (const cpf of cpfsValidos) {
-        const suffix9 = cpf.slice(-9);
-        const existing = cpfSuffix9ToCpf.get(suffix9);
-        if (existing && existing !== cpf) cpfSuffix9ToCpf.set(suffix9, null);
-        else if (existing === undefined) cpfSuffix9ToCpf.set(suffix9, cpf);
-      }
 
       const parseResult = parseAfd(afdText);
       const parsed = parseResult.marks;
+
+      // Enriquece o mapa PIS→CPF cruzando o tipo 5 (Employee) com nomes das admissões.
+      const { map: empMap, resolvidos: empResolvidos } = buildAfdPisToCpfFromEmployees(
+        parseResult.employees,
+        admissoesByName,
+      );
+      for (const [k, v] of empMap.entries()) {
+        if (!afdPisToCpf.has(k)) afdPisToCpf.set(k, v);
+      }
+      if (empResolvidos > 0) {
+        console.info(`[AFD import] Tipo 5: ${empResolvidos} empregado(s) mapeados PIS→CPF via nome.`);
+      }
+
       const marks: AfdMark[] = [];
       let cpfsNaoEncontrados = 0;
+      let ajustesIgnorados = 0;
       const amostrasNaoMapeadas: string[] = [];
       for (const p of parsed) {
-        const resolved = resolveCpfFromRest(p.rest, cpfsValidos, pisToCpf, afdPisToCpf, cpfSuffix9ToCpf);
+        if (p.origem === "tipo4_ajuste") {
+          ajustesIgnorados++;
+          continue;
+        }
+        const resolved = resolvePisToCpf(p.pis, cpfsValidos, pisToCpf, afdPisToCpf);
         if (!resolved) {
           cpfsNaoEncontrados++;
-          if (amostrasNaoMapeadas.length < 50) amostrasNaoMapeadas.push(p.rest.slice(0, 60));
+          if (amostrasNaoMapeadas.length < 50) amostrasNaoMapeadas.push(`PIS=${p.pis ?? "—"} ${p.date} ${p.time}`);
           continue;
         }
         marks.push({ nsr: p.nsr, dt: p.dt, cpf: resolved.cpf, date: p.date, time: p.time });
@@ -1502,7 +1606,7 @@ export function AdminPontoEletronico() {
 
       if (amostrasNaoMapeadas.length > 0) {
         console.warn(
-          `[AFD import] ${cpfsNaoEncontrados} marcação(ões) sem CPF/PIS mapeado em admissões. Amostras (rest):`,
+          `[AFD import] ${cpfsNaoEncontrados} marcação(ões) sem PIS mapeado. Amostras:`,
           amostrasNaoMapeadas,
         );
       }
@@ -1512,6 +1616,10 @@ export function AdminPontoEletronico() {
           parseResult.amostrasFalhadas,
         );
       }
+      console.info(
+        "[AFD import] Contagem por tipo:", parseResult.contagemPorTipo,
+        `(empregados tipo 5: ${parseResult.employees.length}, ajustes tipo 4: ${ajustesIgnorados})`,
+      );
 
       if (marks.length === 0) {
         toast({
@@ -1565,16 +1673,18 @@ export function AdminPontoEletronico() {
 
       // Importação manual NÃO atualiza ultimo_nsr (evita travar sync incremental futuro)
 
+      const ct = parseResult.contagemPorTipo;
       const partes = [
         `${parseResult.linhasTotais} linha(s)`,
-        `${parseResult.linhasTipo3} tipo 3`,
+        `T1:${ct["1"] ?? 0} T2:${ct["2"] ?? 0} T3:${ct["3"] ?? 0} T4:${ct["4"] ?? 0} T5:${ct["5"] ?? 0} T9:${ct["9"] ?? 0}`,
         `${parsed.length} marcação(ões) parseada(s)`,
         `${marks.length} mapeada(s)`,
         `${records.length} dia(s)`,
       ];
-      if (parseResult.linhasTipo3Falhadas) partes.push(`${parseResult.linhasTipo3Falhadas} tipo 3 ignorada(s)`);
-      if (cpfsNaoEncontrados) partes.push(`${cpfsNaoEncontrados} sem CPF`);
-      if (marcacoesExcedentes) partes.push(`${marcacoesExcedentes} batidas extras preservadas em "marcacoes_brutas"`);
+      if (parseResult.linhasTipo3Falhadas) partes.push(`${parseResult.linhasTipo3Falhadas} tipo 3 com erro`);
+      if (ajustesIgnorados) partes.push(`${ajustesIgnorados} ajuste(s) tipo 4 ignorado(s)`);
+      if (cpfsNaoEncontrados) partes.push(`${cpfsNaoEncontrados} sem PIS mapeado`);
+      if (marcacoesExcedentes) partes.push(`${marcacoesExcedentes} batidas extras em "marcacoes_brutas"`);
       toast({
         title: `AFD importado: ${fileName}`,
         description: partes.join(" • "),

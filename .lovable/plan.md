@@ -1,67 +1,82 @@
-## Problema
+## Diagnóstico após leitura do leiaute oficial MTE + biblioteca de referência (convenia/afd-reader)
 
-Você está correto: o AFD contém mais marcações do que aparecem no sistema. Após inspeção do código de importação (`AdminPontoEletronico.tsx`, função `confirmManualImport` e `groupMarksIntoDailyRecords`), encontrei **4 causas reais de perda de dados**:
+Comparei o parser atual com a especificação canônica das **Portarias 1510/2009 e 671/2021** e o código de referência da `convenia/afd-reader`. Encontrei mais problemas — **o parser atual usa regex frouxa em vez de leitura posicional fixa**, o que faz ele ignorar registros válidos do leiaute oficial.
 
-### 1. Limite de 500 registros na listagem (apenas exibição)
-Na query de exibição (linha 563): `.limit(500)`. Mesmo que o AFD importe 5.000 dias, a tela só mostra 500. **Os dados estão no banco, só não aparecem.**
+### Estrutura oficial AFD (campos posicionais, codificação ISO-8859-1)
 
-### 2. Truncamento silencioso de marcações > 6 batidas/dia
-Em `groupMarksIntoDailyRecords` (linha 427-431): se um funcionário tem mais de 6 batidas no dia (entrada/saída de almoço bipadas duas vezes, plantões longos com 8 batidas, etc.), as **excedentes são descartadas** — só ficam as 6 primeiras. O AFD muitas vezes tem isso.
+Cada linha começa com **NSR(9 dígitos) + Tipo(1 dígito)**, seguido por payload específico:
 
-### 3. CPFs não mapeados são descartados sem aviso por linha
-Linha 1402-1407: marcações cujo CPF/PIS não bate com nenhuma admissão são contadas em `cpfsNaoEncontrados` mas **nunca persistidas**. Se o CPF veio com formato estranho no AFD (ex.: PIS sem padding), fica fora.
+| Tipo | Significado | Estrutura do payload |
+|------|-------------|----------------------|
+| 1 | Header | identType(1)+CNPJ/CPF(14)+CEI(12)+nome(150)+serial(17)+dataIni(8)+dataFim(8)+dataGer(8)+horaGer(4) |
+| 2 | Alteração de empresa | (ignorável) |
+| **3** | **Marcação Portaria 1510** | **DDMMYYYY(8) + HHMM(4) + PIS(12)** = 24 chars |
+| **3** | **Marcação Portaria 671** | **AAAA-MM-DDThh:mm:00±ZZZZ(24) + PIS(12) + CRC(4)** |
+| **4** | **Ajuste de marcação** | dataAntes(8)+horaAntes(4)+dataDepois(8)+horaDepois(4) — sem PIS |
+| **5** | **Cadastro de empregado** | data(8)+hora(4)+operação(1)+PIS(12)+nome(52) ← **mapeamento PIS↔Nome dentro do próprio AFD** |
+| 9 | Trailer | (ignorável) |
 
-### 4. Mescla com registros existentes pode descartar batidas
-Quando o dia já tem registros (importação parcial anterior), o código mescla cronologicamente e **se passar de 6 slots, descarta** as novas (linha 422-431).
+### Problemas reais no parser atual
 
-### 5. Parser ignora linhas que não casam exatamente
-`parseAfd` (linha 331) só aceita dois formatos rígidos. Linhas com espaços extras, BOM no início, ou variações do REP-C podem ser silenciosamente puladas. Hoje não há contagem de linhas tipo 3 ignoradas.
+1. **Usa `trim()` no início da linha**, descartando espaços internos significativos do leiaute posicional.
+2. **Tenta extrair PIS via regex no `rest`** em vez de pegar exatamente os 12 dígitos na posição correta — pode pegar números errados se houver lixo.
+3. **Não processa tipo 5 (Employee)** — esse registro contém o **mapeamento PIS↔Nome direto do REP**, ouro para resolver CPFs não cadastrados via fallback por nome.
+4. **Ignora completamente tipo 4 (Ajuste)** — esses são marcações legítimas que entram no espelho de ponto.
+5. **Regex de fuso horário só aceita `±HHMM`** sem dois pontos. Portaria 671 permite `±HH:MM`.
+6. **Variante "sem segundos" inventada** no padrão 3 não existe na especificação — é palpite que pode confundir.
 
 ---
 
 ## Plano de correção
 
-### A) Diagnóstico transparente no toast e log
-- Calcular e mostrar no toast final: **linhas totais**, **linhas tipo 3**, **marcações parseadas**, **mapeadas**, **não mapeadas**, **dias gerados**, **batidas excedentes descartadas**.
-- Logar no `console.warn` cada CPF/PIS bruto não mapeado (até 50 amostras) para você identificar quais admissões faltam.
+### A) Reescrever `parseAfd` com leitura posicional fixa (não-regex frouxa)
 
-### B) Persistir marcações excedentes (>6 batidas)
-Criar **registros adicionais** no mesmo dia (mesmo CPF, mesma data) usando uma chave secundária — ou concatenar todas as batidas em um campo de observação JSON `marcacoes_extras` no `motivo` para não perder o dado bruto. Recomendado: **armazenar o array completo bruto** de marcações do dia em um campo JSON novo, mantendo as 6 principais nos slots.
+- Detectar tipo nas posições 0-9 (NSR) e 9 (tipo) por **slicing exato**.
+- **Tipo 3 — Portaria 671**: ler ISO-8601 nas posições 10-33 (24 chars) com regex estrita; PIS nas posições 34-45.
+- **Tipo 3 — Portaria 1510**: ler DDMMYYYY (10-17), HHMM (18-21), PIS (22-33) por slicing puro.
+- **Tipo 4**: ler dataDepois/horaDepois (após o "antes") e gerar uma marcação sem PIS, marcada como `origem: "tipo4_ajuste"` (auditoria, opcionalmente persistida em `marcacoes_brutas` mas sem CPF).
+- **Tipo 5**: extrair `{pis, nome}` para construir um mapa PIS↔Nome interno do AFD.
+- Não chamar `trim()` na linha inteira; preservar layout posicional.
 
-### C) Aumentar limite de listagem e adicionar paginação
-- Subir `.limit(500)` para `.limit(2000)` na query de exibição.
-- Adicionar contador "X registros — mostrando primeiros 2000" quando atingir o limite, e botão "Carregar mais".
+### B) Estender resolução de CPF com 3 fallbacks novos
 
-### D) Parser AFD mais tolerante
-- Remover BOM, normalizar espaços antes do match.
-- Adicionar terceiro padrão: linhas tipo 3 com separadores ou tamanhos variantes.
-- Contar e reportar linhas tipo 3 que falharam no parse.
+Atualmente `resolveCpfFromRest` tenta CPF/PIS/sufixo9. Vou adicionar:
 
-### E) Fallback de CPF mais agressivo
-- Quando a resolução falhar, tentar também: matriz de PIS sem zero à esquerda já presente, mas adicionar busca por **sufixo de 8 dígitos** do CPF e matching por nome (se o AFD tiver razão social), apenas como último recurso e logado.
+1. **Mapa PIS→CPF construído com tipo 5 do AFD + admissões**: se o tipo 5 lista PIS X com nome "JOÃO SILVA", e existe admissão "JOÃO SILVA" com CPF Y, mapear PIS X → CPF Y automaticamente. Útil quando admissão está sem `numero_pis` cadastrado.
+2. **Fallback por nome normalizado** (último recurso, com log): comparar nome do tipo 5 contra `admissoes.nome_completo` ignorando acentos/caso.
+3. **Aceitar PIS sem o zero à esquerda** (já parcialmente implementado, formalizar).
 
-### F) Validação pós-importação
-Após o `upsert`, fazer um `count` no banco filtrado por equipamento/período e comparar com `records.length` esperado. Se divergir, alertar.
+### C) Persistir tipo 4 (ajustes) sem perder o histórico
+
+Ajustes (tipo 4) não têm PIS, então ficam órfãos. Opções:
+- **(c1)** Salvar em `marcacoes_brutas` do dia correspondente como sufixo "(ajuste)".
+- **(c2)** Apenas contar e logar quantos ajustes apareceram, sem persistir.
+
+Vou usar **(c1)** para não perder informação de auditoria.
+
+### D) Reportar contagem por tipo
+
+Toast e console mostrarão: `T1: X • T2: X • T3: X • T4: X • T5: X • T9: X • Tipo 3 falhados: X`. Isso permite diagnosticar instantaneamente se um arquivo tem mais marcações do que está sendo importado.
+
+### E) Validação cruzada com Header
+
+O Header (tipo 1) inclui `dataIni` e `dataFim` do período do AFD. Vou ler esses campos e comparar com as datas das marcações encontradas — se houver discrepância (ex.: header diz mar-jun mas só achei marcações de março), alertar no toast.
 
 ---
 
 ## Arquivos a modificar
 
-- `src/components/admin/AdminPontoEletronico.tsx`
-  - `parseAfd` (linha 331) — parser mais tolerante + contagem de descartes
-  - `groupMarksIntoDailyRecords` (linha 372) — preservar batidas excedentes em campo JSON
-  - `confirmManualImport` (linha 1357) — diagnóstico detalhado, validação pós-importação
-  - Query `registros_ponto` (linha 555) — limite 2000 + indicador de truncamento
+- **`src/components/admin/AdminPontoEletronico.tsx`**:
+  - Reescrever `parseAfd` (linhas 332-439) com parsing posicional + tipos 3/4/5.
+  - Atualizar `parseAfdHeader` para extrair `dataIni`/`dataFim` do header.
+  - Atualizar `resolveCpfFromRest` para receber e usar o mapa Employee (tipo 5) e fallback por nome.
+  - Atualizar `confirmManualImport` e `syncEquipamento` (call sites do parser) para passar admissões+nomes e exibir contagens por tipo.
+  - Persistir ajustes do tipo 4 no campo `marcacoes_brutas`.
 
-- (Opcional) Migração SQL se for adicionar coluna `marcacoes_brutas jsonb` em `registros_ponto` para guardar todas as batidas do dia sem perda.
+Sem migração de banco — a coluna `marcacoes_brutas` já existe.
 
 ---
 
-## Pergunta antes de implementar
+## Resultado esperado
 
-Para batidas excedentes (>6 no dia), prefere:
-- **(a)** Guardar todas as batidas brutas em uma coluna JSON nova (`marcacoes_brutas`) — solução completa, requer migração;
-- **(b)** Apenas anexar as excedentes no campo `motivo` como texto — sem migração, dado fica visível mas não estruturado;
-- **(c)** Manter o descarte atual mas avisar claramente no toast e console — só transparência.
-
-Posso seguir com **(a)** por padrão se você aprovar o plano sem responder.
+Após esta correção, **todas** as marcações que o leiaute MTE define como tipo 3 e 4 serão processadas, e o sistema usará o cadastro de empregados (tipo 5) embutido no próprio AFD para resolver CPFs que hoje ficam de fora por falta de PIS na admissão.
