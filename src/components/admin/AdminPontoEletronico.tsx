@@ -2547,7 +2547,7 @@ export function AdminPontoEletronico() {
                     if (error) { fail++; console.error("[pis link]", cpf, error); }
                     else ok++;
                   }
-                  await queryClient.invalidateQueries({ queryKey: ["admissoes_mini_ponto"] });
+                  await qc.invalidateQueries({ queryKey: ["admissoes_mini_ponto"] });
                   toast({
                     title: "Vínculos salvos",
                     description: `${ok} vínculo(s) gravado(s)${fail ? ` • ${fail} falha(s)` : ""}. Agora clique em "Confirmar importação".`,
