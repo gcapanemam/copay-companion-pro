@@ -328,45 +328,113 @@ function resolveCpfFromRest(
   return null;
 }
 
-function parseAfd(afdText: string): Array<{ nsr: number; dt: Date; date: string; time: string; rest: string }> {
-  const marks: Array<{ nsr: number; dt: Date; date: string; time: string; rest: string }> = [];
-  const lines = afdText.split(/\r?\n/);
-  for (const line of lines) {
-    const trimmed = String(line || "").trim();
-    if (!trimmed) continue;
+type ParseAfdResult = {
+  marks: Array<{ nsr: number; dt: Date; date: string; time: string; rest: string }>;
+  linhasTotais: number;
+  linhasTipo3: number;
+  linhasTipo3Falhadas: number;
+  amostrasFalhadas: string[];
+};
 
-    const iso = trimmed.match(/^(\d{9})(\d)(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}-\d{4})(.*)$/);
+function parseAfd(afdText: string): ParseAfdResult {
+  const marks: ParseAfdResult["marks"] = [];
+  // Remove BOM e normaliza linhas
+  const cleanText = String(afdText || "").replace(/^\uFEFF/, "");
+  const rawLines = cleanText.split(/\r?\n/);
+  let linhasTotais = 0;
+  let linhasTipo3 = 0;
+  let linhasTipo3Falhadas = 0;
+  const amostrasFalhadas: string[] = [];
+
+  for (const line of rawLines) {
+    // Normaliza espaços/tabs internos preservando estrutura geral
+    const trimmed = String(line || "").replace(/\s+$/g, "").replace(/^\s+/g, "");
+    if (!trimmed) continue;
+    linhasTotais++;
+
+    // Detecta tipo da linha: NSR(9) + tipo(1)
+    const tipoMatch = trimmed.match(/^(\d{9})(\d)/);
+    const isTipo3 = tipoMatch && tipoMatch[2] === "3";
+    if (isTipo3) linhasTipo3++;
+
+    // Padrão 1: NSR(9) + tipo(1) + ISO 8601
+    const iso = trimmed.match(/^(\d{9})(\d)(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:?\d{2})(.*)$/);
     if (iso) {
       const [, nsr, tipo, ts, rest] = iso;
       if (tipo !== "3") continue;
       const nsrNum = Number(nsr);
       if (!Number.isFinite(nsrNum) || nsrNum <= 0) continue;
-      const dt = new Date(ts);
-      if (Number.isNaN(dt.getTime())) continue;
-      const date = ts.slice(0, 10);
-      const time = ts.slice(11, 16);
+      // Normaliza fuso horário sem dois pontos (ex.: -0300 -> -03:00)
+      const tsNorm = ts.length === 24 ? `${ts.slice(0, 22)}:${ts.slice(22)}` : ts;
+      const dt = new Date(tsNorm);
+      if (Number.isNaN(dt.getTime())) {
+        if (isTipo3) {
+          linhasTipo3Falhadas++;
+          if (amostrasFalhadas.length < 10) amostrasFalhadas.push(trimmed.slice(0, 80));
+        }
+        continue;
+      }
+      const date = tsNorm.slice(0, 10);
+      const time = tsNorm.slice(11, 16);
       marks.push({ nsr: nsrNum, dt, date, time, rest: rest || "" });
       continue;
     }
 
+    // Padrão 2: NSR(9) + tipo(1) + DDMMYYYYHHMMSS
     const compact = trimmed.match(/^(\d{9})(\d)(\d{2})(\d{2})(\d{4})(\d{2})(\d{2})(\d{2})(.*)$/);
     if (compact) {
       const [, nsr, tipo, dd, mm, yyyy, hh, mi, ss, rest] = compact;
       if (tipo !== "3") continue;
       const ddNum = Number(dd);
       const mmNum = Number(mm);
-      if (ddNum < 1 || ddNum > 31 || mmNum < 1 || mmNum > 12) continue;
+      if (ddNum < 1 || ddNum > 31 || mmNum < 1 || mmNum > 12) {
+        linhasTipo3Falhadas++;
+        if (amostrasFalhadas.length < 10) amostrasFalhadas.push(trimmed.slice(0, 80));
+        continue;
+      }
       const nsrNum = Number(nsr);
       if (!Number.isFinite(nsrNum) || nsrNum <= 0) continue;
       const dt = new Date(`${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}-03:00`);
-      if (Number.isNaN(dt.getTime())) continue;
+      if (Number.isNaN(dt.getTime())) {
+        linhasTipo3Falhadas++;
+        if (amostrasFalhadas.length < 10) amostrasFalhadas.push(trimmed.slice(0, 80));
+        continue;
+      }
       const date = `${yyyy}-${mm}-${dd}`;
       const time = `${hh}:${mi}`;
       marks.push({ nsr: nsrNum, dt, date, time, rest: rest || "" });
       continue;
     }
+
+    // Padrão 3: NSR(9) + tipo(1) + DDMMYYYY + HHMM (sem segundos) — variante tolerante
+    if (isTipo3) {
+      const compact2 = trimmed.match(/^(\d{9})3(\d{2})(\d{2})(\d{4})(\d{2})(\d{2})(.*)$/);
+      if (compact2) {
+        const [, nsr, dd, mm, yyyy, hh, mi, rest] = compact2;
+        const nsrNum = Number(nsr);
+        const ddNum = Number(dd);
+        const mmNum = Number(mm);
+        if (Number.isFinite(nsrNum) && nsrNum > 0 && ddNum >= 1 && ddNum <= 31 && mmNum >= 1 && mmNum <= 12) {
+          const dt = new Date(`${yyyy}-${mm}-${dd}T${hh}:${mi}:00-03:00`);
+          if (!Number.isNaN(dt.getTime())) {
+            marks.push({
+              nsr: nsrNum,
+              dt,
+              date: `${yyyy}-${mm}-${dd}`,
+              time: `${hh}:${mi}`,
+              rest: rest || "",
+            });
+            continue;
+          }
+        }
+      }
+      // Era tipo 3 mas nenhum padrão casou
+      linhasTipo3Falhadas++;
+      if (amostrasFalhadas.length < 10) amostrasFalhadas.push(trimmed.slice(0, 80));
+    }
   }
-  return marks;
+
+  return { marks, linhasTotais, linhasTipo3, linhasTipo3Falhadas, amostrasFalhadas };
 }
 
 function groupMarksIntoDailyRecords(
