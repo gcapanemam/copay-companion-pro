@@ -2362,6 +2362,38 @@ export function AdminPontoEletronico() {
                 A importação manual mescla com registros existentes (cpf+data) e <strong>não</strong> altera o
                 cursor de sincronização do equipamento.
               </p>
+
+              {importPreview.pisDistintos.length > 0 && (
+                <div className="rounded-md border border-border bg-muted/40 p-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs">
+                      <strong>{importPreview.pisDistintos.length}</strong> PIS distinto(s) encontrado(s) no AFD.
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        // Pré-popular o mapa com PIS já cadastrados em admissoes
+                        const seed: Record<string, string> = {};
+                        const pisToCpfBd = new Map<string, string>();
+                        for (const f of funcionariosMini) {
+                          // funcionariosMini não traz numero_pis; deixamos vazio.
+                        }
+                        setPisLinkMap(seed);
+                        setPisLinkBusca("");
+                        setPisLinkOpen(true);
+                      }}
+                    >
+                      Vincular PIS ↔ CPF
+                    </Button>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Use esta tela para indicar manualmente qual funcionário corresponde a cada PIS.
+                    Os vínculos são gravados em <code>admissoes.numero_pis</code>.
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
