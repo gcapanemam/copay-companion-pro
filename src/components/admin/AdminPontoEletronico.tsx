@@ -225,7 +225,7 @@ function buildBaseUrl(host: string, porta: number | null): string {
   return `${scheme}://${h}:${p}`;
 }
 
-type AdmissaoRow = { cpf: string | null; numero_pis: string | null };
+type AdmissaoRow = { cpf: string | null; numero_pis: string | null; nome_completo: string | null };
 
 type RegistroPontoUpsert = {
   cpf: string;
