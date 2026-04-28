@@ -243,6 +243,7 @@ type RegistroPontoUpsert = {
   nsr: number | null;
   data_hora: string | null;
   tipo_marcacao: string | null;
+  marcacoes_brutas: string[] | null;
 };
 
 type AfdMark = { nsr: number; dt: Date; cpf: string; date: string; time: string };
