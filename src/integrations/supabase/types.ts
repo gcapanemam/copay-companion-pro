@@ -1116,6 +1116,7 @@ export type Database = {
           id: string
           latitude: number | null
           longitude: number | null
+          marcacoes_brutas: Json | null
           motivo: string | null
           nsr: number | null
           ocorrencia: string | null
@@ -1139,6 +1140,7 @@ export type Database = {
           id?: string
           latitude?: number | null
           longitude?: number | null
+          marcacoes_brutas?: Json | null
           motivo?: string | null
           nsr?: number | null
           ocorrencia?: string | null
@@ -1162,6 +1164,7 @@ export type Database = {
           id?: string
           latitude?: number | null
           longitude?: number | null
+          marcacoes_brutas?: Json | null
           motivo?: string | null
           nsr?: number | null
           ocorrencia?: string | null

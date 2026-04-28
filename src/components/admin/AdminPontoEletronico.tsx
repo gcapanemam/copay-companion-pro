@@ -243,6 +243,7 @@ type RegistroPontoUpsert = {
   nsr: number | null;
   data_hora: string | null;
   tipo_marcacao: string | null;
+  marcacoes_brutas: string[] | null;
 };
 
 type AfdMark = { nsr: number; dt: Date; cpf: string; date: string; time: string };
@@ -328,45 +329,113 @@ function resolveCpfFromRest(
   return null;
 }
 
-function parseAfd(afdText: string): Array<{ nsr: number; dt: Date; date: string; time: string; rest: string }> {
-  const marks: Array<{ nsr: number; dt: Date; date: string; time: string; rest: string }> = [];
-  const lines = afdText.split(/\r?\n/);
-  for (const line of lines) {
-    const trimmed = String(line || "").trim();
-    if (!trimmed) continue;
+type ParseAfdResult = {
+  marks: Array<{ nsr: number; dt: Date; date: string; time: string; rest: string }>;
+  linhasTotais: number;
+  linhasTipo3: number;
+  linhasTipo3Falhadas: number;
+  amostrasFalhadas: string[];
+};
 
-    const iso = trimmed.match(/^(\d{9})(\d)(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}-\d{4})(.*)$/);
+function parseAfd(afdText: string): ParseAfdResult {
+  const marks: ParseAfdResult["marks"] = [];
+  // Remove BOM e normaliza linhas
+  const cleanText = String(afdText || "").replace(/^\uFEFF/, "");
+  const rawLines = cleanText.split(/\r?\n/);
+  let linhasTotais = 0;
+  let linhasTipo3 = 0;
+  let linhasTipo3Falhadas = 0;
+  const amostrasFalhadas: string[] = [];
+
+  for (const line of rawLines) {
+    // Normaliza espaços/tabs internos preservando estrutura geral
+    const trimmed = String(line || "").replace(/\s+$/g, "").replace(/^\s+/g, "");
+    if (!trimmed) continue;
+    linhasTotais++;
+
+    // Detecta tipo da linha: NSR(9) + tipo(1)
+    const tipoMatch = trimmed.match(/^(\d{9})(\d)/);
+    const isTipo3 = tipoMatch && tipoMatch[2] === "3";
+    if (isTipo3) linhasTipo3++;
+
+    // Padrão 1: NSR(9) + tipo(1) + ISO 8601
+    const iso = trimmed.match(/^(\d{9})(\d)(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:?\d{2})(.*)$/);
     if (iso) {
       const [, nsr, tipo, ts, rest] = iso;
       if (tipo !== "3") continue;
       const nsrNum = Number(nsr);
       if (!Number.isFinite(nsrNum) || nsrNum <= 0) continue;
-      const dt = new Date(ts);
-      if (Number.isNaN(dt.getTime())) continue;
-      const date = ts.slice(0, 10);
-      const time = ts.slice(11, 16);
+      // Normaliza fuso horário sem dois pontos (ex.: -0300 -> -03:00)
+      const tsNorm = ts.length === 24 ? `${ts.slice(0, 22)}:${ts.slice(22)}` : ts;
+      const dt = new Date(tsNorm);
+      if (Number.isNaN(dt.getTime())) {
+        if (isTipo3) {
+          linhasTipo3Falhadas++;
+          if (amostrasFalhadas.length < 10) amostrasFalhadas.push(trimmed.slice(0, 80));
+        }
+        continue;
+      }
+      const date = tsNorm.slice(0, 10);
+      const time = tsNorm.slice(11, 16);
       marks.push({ nsr: nsrNum, dt, date, time, rest: rest || "" });
       continue;
     }
 
+    // Padrão 2: NSR(9) + tipo(1) + DDMMYYYYHHMMSS
     const compact = trimmed.match(/^(\d{9})(\d)(\d{2})(\d{2})(\d{4})(\d{2})(\d{2})(\d{2})(.*)$/);
     if (compact) {
       const [, nsr, tipo, dd, mm, yyyy, hh, mi, ss, rest] = compact;
       if (tipo !== "3") continue;
       const ddNum = Number(dd);
       const mmNum = Number(mm);
-      if (ddNum < 1 || ddNum > 31 || mmNum < 1 || mmNum > 12) continue;
+      if (ddNum < 1 || ddNum > 31 || mmNum < 1 || mmNum > 12) {
+        linhasTipo3Falhadas++;
+        if (amostrasFalhadas.length < 10) amostrasFalhadas.push(trimmed.slice(0, 80));
+        continue;
+      }
       const nsrNum = Number(nsr);
       if (!Number.isFinite(nsrNum) || nsrNum <= 0) continue;
       const dt = new Date(`${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}-03:00`);
-      if (Number.isNaN(dt.getTime())) continue;
+      if (Number.isNaN(dt.getTime())) {
+        linhasTipo3Falhadas++;
+        if (amostrasFalhadas.length < 10) amostrasFalhadas.push(trimmed.slice(0, 80));
+        continue;
+      }
       const date = `${yyyy}-${mm}-${dd}`;
       const time = `${hh}:${mi}`;
       marks.push({ nsr: nsrNum, dt, date, time, rest: rest || "" });
       continue;
     }
+
+    // Padrão 3: NSR(9) + tipo(1) + DDMMYYYY + HHMM (sem segundos) — variante tolerante
+    if (isTipo3) {
+      const compact2 = trimmed.match(/^(\d{9})3(\d{2})(\d{2})(\d{4})(\d{2})(\d{2})(.*)$/);
+      if (compact2) {
+        const [, nsr, dd, mm, yyyy, hh, mi, rest] = compact2;
+        const nsrNum = Number(nsr);
+        const ddNum = Number(dd);
+        const mmNum = Number(mm);
+        if (Number.isFinite(nsrNum) && nsrNum > 0 && ddNum >= 1 && ddNum <= 31 && mmNum >= 1 && mmNum <= 12) {
+          const dt = new Date(`${yyyy}-${mm}-${dd}T${hh}:${mi}:00-03:00`);
+          if (!Number.isNaN(dt.getTime())) {
+            marks.push({
+              nsr: nsrNum,
+              dt,
+              date: `${yyyy}-${mm}-${dd}`,
+              time: `${hh}:${mi}`,
+              rest: rest || "",
+            });
+            continue;
+          }
+        }
+      }
+      // Era tipo 3 mas nenhum padrão casou
+      linhasTipo3Falhadas++;
+      if (amostrasFalhadas.length < 10) amostrasFalhadas.push(trimmed.slice(0, 80));
+    }
   }
-  return marks;
+
+  return { marks, linhasTotais, linhasTipo3, linhasTipo3Falhadas, amostrasFalhadas };
 }
 
 function groupMarksIntoDailyRecords(
@@ -451,6 +520,8 @@ function groupMarksIntoDailyRecords(
       nsr: Math.max(existing?.nsr ?? 0, lastNew?.nsr ?? 0) || (lastNew?.nsr ?? null),
       data_hora: lastDt ? lastDt.toISOString() : null,
       tipo_marcacao: existing?.tipo_marcacao ?? null,
+      // Preserva todas as batidas originais do dia (mesmo as que excedem 6 slots)
+      marcacoes_brutas: todas.length > 0 ? todas : null,
     });
   }
 
@@ -560,7 +631,7 @@ export function AdminPontoEletronico() {
         .select("*")
         .order("data", { ascending: false })
         .order("cpf", { ascending: true })
-        .limit(500);
+        .limit(2000);
 
       if (filtroEquipamento !== "__all__") q = q.eq("equipamento_id", filtroEquipamento);
       if (dataDe) q = q.gte("data", dataDe);
@@ -1162,7 +1233,8 @@ export function AdminPontoEletronico() {
       else if (existing === undefined) cpfSuffix9ToCpf.set(suffix9, cpf);
     }
 
-    const parsed = parseAfd(afdText);
+    const parseResult = parseAfd(afdText);
+    const parsed = parseResult.marks;
     if (parsed.length === 0) {
       const preview = summarizeBody(afdText);
       const hint = preview ? `Conteúdo recebido: ${preview}` : "Conteúdo vazio";
@@ -1172,15 +1244,26 @@ export function AdminPontoEletronico() {
     let cpfsNaoEncontrados = 0;
     let cpfResolvido = 0;
     let pisResolvido = 0;
+    const amostrasNaoMapeadas: string[] = [];
     for (const p of parsed) {
       const resolved = resolveCpfFromRest(p.rest, cpfsValidos, pisToCpf, afdPisToCpf, cpfSuffix9ToCpf);
       if (!resolved) {
         cpfsNaoEncontrados++;
+        if (amostrasNaoMapeadas.length < 50) amostrasNaoMapeadas.push(p.rest.slice(0, 60));
         continue;
       }
       if (resolved.tipo === "cpf") cpfResolvido++;
       else pisResolvido++;
       marks.push({ nsr: p.nsr, dt: p.dt, cpf: resolved.cpf, date: p.date, time: p.time });
+    }
+    if (amostrasNaoMapeadas.length > 0) {
+      console.warn("[AFD sync] CPFs/PIS não mapeados (amostra):", amostrasNaoMapeadas);
+    }
+    if (parseResult.linhasTipo3Falhadas > 0) {
+      console.warn(
+        `[AFD sync] ${parseResult.linhasTipo3Falhadas} linha(s) tipo 3 com formato não reconhecido. Amostras:`,
+        parseResult.amostrasFalhadas,
+      );
     }
 
     const existingByKey = new Map<string, RegistroPonto>();
@@ -1304,15 +1387,22 @@ export function AdminPontoEletronico() {
         toast({ title: "Arquivo vazio", variant: "destructive" });
         return;
       }
-      const lines = afdText.split(/\r?\n/).filter((l) => l.trim().length > 0);
-      const parsed = parseAfd(afdText);
+      
+      const parseResult = parseAfd(afdText);
+      const parsed = parseResult.marks;
       if (parsed.length === 0) {
         toast({
           title: "Arquivo não reconhecido",
-          description: "Nenhuma marcação tipo 3 encontrada no formato Portaria 671.",
+          description: `Nenhuma marcação tipo 3 encontrada (${parseResult.linhasTipo3} linha(s) tipo 3, ${parseResult.linhasTipo3Falhadas} falharam).`,
           variant: "destructive",
         });
         return;
+      }
+      if (parseResult.linhasTipo3Falhadas > 0) {
+        console.warn(
+          `[AFD import] ${parseResult.linhasTipo3Falhadas} linha(s) tipo 3 ignoradas. Amostras:`,
+          parseResult.amostrasFalhadas,
+        );
       }
       const { empresa, cnpj } = parseAfdHeader(afdText);
       let nsrMin: number | null = null;
@@ -1334,7 +1424,7 @@ export function AdminPontoEletronico() {
         afdText,
         empresa,
         cnpj,
-        totalLinhas: lines.length,
+        totalLinhas: parseResult.linhasTotais,
         totalMarcacoes: parsed.length,
         nsrMin,
         nsrMax,
@@ -1395,22 +1485,38 @@ export function AdminPontoEletronico() {
         else if (existing === undefined) cpfSuffix9ToCpf.set(suffix9, cpf);
       }
 
-      const parsed = parseAfd(afdText);
+      const parseResult = parseAfd(afdText);
+      const parsed = parseResult.marks;
       const marks: AfdMark[] = [];
       let cpfsNaoEncontrados = 0;
+      const amostrasNaoMapeadas: string[] = [];
       for (const p of parsed) {
         const resolved = resolveCpfFromRest(p.rest, cpfsValidos, pisToCpf, afdPisToCpf, cpfSuffix9ToCpf);
         if (!resolved) {
           cpfsNaoEncontrados++;
+          if (amostrasNaoMapeadas.length < 50) amostrasNaoMapeadas.push(p.rest.slice(0, 60));
           continue;
         }
         marks.push({ nsr: p.nsr, dt: p.dt, cpf: resolved.cpf, date: p.date, time: p.time });
       }
 
+      if (amostrasNaoMapeadas.length > 0) {
+        console.warn(
+          `[AFD import] ${cpfsNaoEncontrados} marcação(ões) sem CPF/PIS mapeado em admissões. Amostras (rest):`,
+          amostrasNaoMapeadas,
+        );
+      }
+      if (parseResult.linhasTipo3Falhadas > 0) {
+        console.warn(
+          `[AFD import] ${parseResult.linhasTipo3Falhadas} linha(s) tipo 3 ignoradas no parse. Amostras:`,
+          parseResult.amostrasFalhadas,
+        );
+      }
+
       if (marks.length === 0) {
         toast({
           title: "Nenhuma marcação aproveitada",
-          description: `${parsed.length} linha(s) lida(s) • ${cpfsNaoEncontrados} CPF(s) não mapeado(s) em admissões.`,
+          description: `${parsed.length} marcação(ões) tipo 3 lida(s) • ${cpfsNaoEncontrados} CPF(s) não mapeado(s) em admissões.`,
           variant: "destructive",
         });
         setImporting(false);
@@ -1460,11 +1566,15 @@ export function AdminPontoEletronico() {
       // Importação manual NÃO atualiza ultimo_nsr (evita travar sync incremental futuro)
 
       const partes = [
-        `${records.length} dia(s) importado(s)`,
-        `${marks.length} marcação(ões)`,
+        `${parseResult.linhasTotais} linha(s)`,
+        `${parseResult.linhasTipo3} tipo 3`,
+        `${parsed.length} marcação(ões) parseada(s)`,
+        `${marks.length} mapeada(s)`,
+        `${records.length} dia(s)`,
       ];
-      if (cpfsNaoEncontrados) partes.push(`${cpfsNaoEncontrados} não mapeada(s)`);
-      if (marcacoesExcedentes) partes.push(`${marcacoesExcedentes} excedente(s) (>6 batidas/dia)`);
+      if (parseResult.linhasTipo3Falhadas) partes.push(`${parseResult.linhasTipo3Falhadas} tipo 3 ignorada(s)`);
+      if (cpfsNaoEncontrados) partes.push(`${cpfsNaoEncontrados} sem CPF`);
+      if (marcacoesExcedentes) partes.push(`${marcacoesExcedentes} batidas extras preservadas em "marcacoes_brutas"`);
       toast({
         title: `AFD importado: ${fileName}`,
         description: partes.join(" • "),

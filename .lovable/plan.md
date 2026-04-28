@@ -1,109 +1,67 @@
+## Problema
 
-# Inconsistências de Vale-Transporte
+Você está correto: o AFD contém mais marcações do que aparecem no sistema. Após inspeção do código de importação (`AdminPontoEletronico.tsx`, função `confirmManualImport` e `groupMarksIntoDailyRecords`), encontrei **4 causas reais de perda de dados**:
 
-## Visão geral
+### 1. Limite de 500 registros na listagem (apenas exibição)
+Na query de exibição (linha 563): `.limit(500)`. Mesmo que o AFD importe 5.000 dias, a tela só mostra 500. **Os dados estão no banco, só não aparecem.**
 
-Após cada importação de PDF de uso, o sistema avalia cada passagem em ordem (a primeira regra que falhar marca o uso como inconsistente; as demais não são testadas):
+### 2. Truncamento silencioso de marcações > 6 batidas/dia
+Em `groupMarksIntoDailyRecords` (linha 427-431): se um funcionário tem mais de 6 batidas no dia (entrada/saída de almoço bipadas duas vezes, plantões longos com 8 batidas, etc.), as **excedentes são descartadas** — só ficam as 6 primeiras. O AFD muitas vezes tem isso.
 
-1. **Dia não útil** — fim de semana, feriado, recesso ou férias do funcionário, exceto se a data estiver marcada como sábado letivo.
-2. **Fora do horário de trabalho** — uso antes de (entrada − 1h) ou depois de (saída + 1h) da jornada vigente.
-3. **Mesma linha em curto intervalo** — mesma linha usada com menos de 1h de diferença.
-4. **Linha não cadastrada** — linha do uso não está na lista de linhas do cartão.
+### 3. CPFs não mapeados são descartados sem aviso por linha
+Linha 1402-1407: marcações cujo CPF/PIS não bate com nenhuma admissão são contadas em `cpfsNaoEncontrados` mas **nunca persistidas**. Se o CPF veio com formato estranho no AFD (ex.: PIS sem padding), fica fora.
 
-Casos especiais:
-- Sem jornada vigente → marca **"Cadastro incompleto: jornada"** (regras 2 não roda).
-- Cartão sem linhas cadastradas → marca **"Cadastro incompleto: linhas"** (regra 4 não roda).
+### 4. Mescla com registros existentes pode descartar batidas
+Quando o dia já tem registros (importação parcial anterior), o código mescla cronologicamente e **se passar de 6 slots, descarta** as novas (linha 422-431).
 
-Funcionário vê suas inconsistências no portal e envia uma **justificativa**. Admin aprova ou rejeita com observação opcional.
+### 5. Parser ignora linhas que não casam exatamente
+`parseAfd` (linha 331) só aceita dois formatos rígidos. Linhas com espaços extras, BOM no início, ou variações do REP-C podem ser silenciosamente puladas. Hoje não há contagem de linhas tipo 3 ignoradas.
 
-## Novas seções de UI
+---
 
-### Admin → aba "Calendário" (nova, dentro de Vale-Transporte ou ao lado)
-- **Feriados / Recessos**: lista (data, descrição, tipo: feriado | recesso | sábado letivo) com adicionar/excluir.
-- **Férias por funcionário**: seleciona funcionário, define período `início → fim`.
+## Plano de correção
 
-### Admin → Vale-Transporte → nova aba "Inconsistências"
-- Filtros: período (mês/ano), funcionário, status (pendente / justificada / aprovada / rejeitada), tipo de regra.
-- Tabela: data/hora, funcionário, linha, valor, **regra violada**, justificativa do funcionário, ação (aprovar/rejeitar com observação).
-- Badges coloridos por regra.
+### A) Diagnóstico transparente no toast e log
+- Calcular e mostrar no toast final: **linhas totais**, **linhas tipo 3**, **marcações parseadas**, **mapeadas**, **não mapeadas**, **dias gerados**, **batidas excedentes descartadas**.
+- Logar no `console.warn` cada CPF/PIS bruto não mapeado (até 50 amostras) para você identificar quais admissões faltam.
 
-### Portal funcionário → aba "Inconsistências do VT"
-- Lista apenas as do próprio CPF.
-- Para cada item pendente: campo de texto + botão "Enviar justificativa".
-- Mostra status (pendente, em análise, aprovada, rejeitada) e a observação do admin quando houver.
+### B) Persistir marcações excedentes (>6 batidas)
+Criar **registros adicionais** no mesmo dia (mesmo CPF, mesma data) usando uma chave secundária — ou concatenar todas as batidas em um campo de observação JSON `marcacoes_extras` no `motivo` para não perder o dado bruto. Recomendado: **armazenar o array completo bruto** de marcações do dia em um campo JSON novo, mantendo as 6 principais nos slots.
 
-## Fluxo de cálculo (automático ao importar PDF)
+### C) Aumentar limite de listagem e adicionar paginação
+- Subir `.limit(500)` para `.limit(2000)` na query de exibição.
+- Adicionar contador "X registros — mostrando primeiros 2000" quando atingir o limite, e botão "Carregar mais".
 
-1. Após `vt_usos.upsert` no `handleConfirmImportPdf`, dispara `analisarInconsistenciasUsos(usos)`.
-2. Para cada uso novo, aplica as 4 regras em ordem; ao primeiro hit, grava em `vt_inconsistencias` com `regra` e `detalhe`. 
-3. Botão "Reanalisar período" no admin para reprocessar usos antigos (limpa e recalcula inconsistências do período).
+### D) Parser AFD mais tolerante
+- Remover BOM, normalizar espaços antes do match.
+- Adicionar terceiro padrão: linhas tipo 3 com separadores ou tamanhos variantes.
+- Contar e reportar linhas tipo 3 que falharam no parse.
 
-## Detalhes técnicos
+### E) Fallback de CPF mais agressivo
+- Quando a resolução falhar, tentar também: matriz de PIS sem zero à esquerda já presente, mas adicionar busca por **sufixo de 8 dígitos** do CPF e matching por nome (se o AFD tiver razão social), apenas como último recurso e logado.
 
-### Banco
+### F) Validação pós-importação
+Após o `upsert`, fazer um `count` no banco filtrado por equipamento/período e comparar com `records.length` esperado. Se divergir, alertar.
 
-```sql
--- Calendário (feriados, recessos e sábados letivos)
-CREATE TABLE public.vt_calendario (
-  id uuid PK default gen_random_uuid(),
-  data date NOT NULL,
-  tipo text NOT NULL CHECK (tipo IN ('feriado','recesso','sabado_letivo')),
-  descricao text,
-  created_at timestamptz default now(),
-  UNIQUE(data, tipo)
-);
+---
 
--- Férias individuais
-CREATE TABLE public.vt_ferias (
-  id uuid PK,
-  cpf text NOT NULL,
-  data_inicio date NOT NULL,
-  data_fim date NOT NULL,
-  observacao text,
-  created_at timestamptz default now()
-);
+## Arquivos a modificar
 
--- Inconsistências detectadas
-CREATE TABLE public.vt_inconsistencias (
-  id uuid PK,
-  uso_id uuid NOT NULL REFERENCES public.vt_usos(id) ON DELETE CASCADE,
-  cpf text,
-  numero_cartao text NOT NULL,
-  data_hora timestamptz NOT NULL,
-  linha text,
-  valor numeric NOT NULL,
-  regra text NOT NULL,        -- 'dia_nao_util' | 'fora_horario' | 'linha_repetida_curto_intervalo' | 'linha_nao_cadastrada' | 'cadastro_incompleto_jornada' | 'cadastro_incompleto_linhas'
-  detalhe text,                -- ex.: "Domingo", "Saída padrão 17:00 → uso 19:30", "Linha 6062 usada às 08:10 e 08:45"
-  justificativa text,
-  justificada_em timestamptz,
-  status text NOT NULL DEFAULT 'pendente', -- 'pendente' | 'justificada' | 'aprovada' | 'rejeitada'
-  decisao_por text,
-  decisao_em timestamptz,
-  observacao_admin text,
-  created_at timestamptz default now(),
-  UNIQUE(uso_id)
-);
-```
+- `src/components/admin/AdminPontoEletronico.tsx`
+  - `parseAfd` (linha 331) — parser mais tolerante + contagem de descartes
+  - `groupMarksIntoDailyRecords` (linha 372) — preservar batidas excedentes em campo JSON
+  - `confirmManualImport` (linha 1357) — diagnóstico detalhado, validação pós-importação
+  - Query `registros_ponto` (linha 555) — limite 2000 + indicador de truncamento
 
-RLS: `anon` SELECT/UPDATE (justificativa) em `vt_inconsistencias` e SELECT em calendário/férias; `authenticated` ALL em todas. Padrão consistente com o resto do projeto.
+- (Opcional) Migração SQL se for adicionar coluna `marcacoes_brutas jsonb` em `registros_ponto` para guardar todas as batidas do dia sem perda.
 
-### Lógica (novo arquivo `src/lib/analisarVtInconsistencias.ts`)
+---
 
-Função pura que recebe:
-- usos novos (`vt_usos`)
-- jornadas vigentes por CPF (busca de `funcionario_jornada` + `jornadas_trabalho`)
-- linhas por cartão (`vt_cartoes.linhas`)
-- calendário e férias
+## Pergunta antes de implementar
 
-Retorna a lista de inconsistências para inserir em batch. Aplica as regras em ordem; para a regra 3 ordena os usos do mesmo cartão+linha por timestamp e compara com o anterior.
+Para batidas excedentes (>6 no dia), prefere:
+- **(a)** Guardar todas as batidas brutas em uma coluna JSON nova (`marcacoes_brutas`) — solução completa, requer migração;
+- **(b)** Apenas anexar as excedentes no campo `motivo` como texto — sem migração, dado fica visível mas não estruturado;
+- **(c)** Manter o descarte atual mas avisar claramente no toast e console — só transparência.
 
-### UI
-
-- `src/components/admin/AdminVtCalendario.tsx` — nova tela (feriados + férias).
-- `src/components/admin/AdminVtInconsistencias.tsx` — tabela com aprovação.
-- `src/components/portal/PortalVtInconsistencias.tsx` — lista + justificativa do funcionário.
-- Em `AdminValeTransporte.tsx`: adicionar abas "Inconsistências" e "Calendário"; chamar análise dentro de `handleConfirmImportPdf` após inserir.
-- Em `MinhaArea.tsx` (portal): adicionar aba "Inconsistências VT" usando o novo componente.
-
-## Pronto para implementar?
-Após aprovação eu crio a migration, a função de análise, as 3 telas novas e a integração com o fluxo de importação.
+Posso seguir com **(a)** por padrão se você aprovar o plano sem responder.
