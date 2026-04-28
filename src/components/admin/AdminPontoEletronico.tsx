@@ -1388,14 +1388,21 @@ export function AdminPontoEletronico() {
         return;
       }
       const lines = afdText.split(/\r?\n/).filter((l) => l.trim().length > 0);
-      const parsed = parseAfd(afdText);
+      const parseResult = parseAfd(afdText);
+      const parsed = parseResult.marks;
       if (parsed.length === 0) {
         toast({
           title: "Arquivo não reconhecido",
-          description: "Nenhuma marcação tipo 3 encontrada no formato Portaria 671.",
+          description: `Nenhuma marcação tipo 3 encontrada (${parseResult.linhasTipo3} linha(s) tipo 3, ${parseResult.linhasTipo3Falhadas} falharam).`,
           variant: "destructive",
         });
         return;
+      }
+      if (parseResult.linhasTipo3Falhadas > 0) {
+        console.warn(
+          `[AFD import] ${parseResult.linhasTipo3Falhadas} linha(s) tipo 3 ignoradas. Amostras:`,
+          parseResult.amostrasFalhadas,
+        );
       }
       const { empresa, cnpj } = parseAfdHeader(afdText);
       let nsrMin: number | null = null;
@@ -1417,7 +1424,7 @@ export function AdminPontoEletronico() {
         afdText,
         empresa,
         cnpj,
-        totalLinhas: lines.length,
+        totalLinhas: parseResult.linhasTotais,
         totalMarcacoes: parsed.length,
         nsrMin,
         nsrMax,
