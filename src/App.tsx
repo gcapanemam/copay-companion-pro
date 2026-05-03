@@ -8,6 +8,7 @@ import Index from "./pages/Index.tsx";
 import MinhaArea from "./pages/MinhaArea.tsx";
 import Login from "./pages/Login.tsx";
 import Admissao from "./pages/Admissao.tsx";
+import Landing from "./pages/Landing.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -19,6 +20,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
+          <Route path="/landing" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
           <Route path="/minha-area" element={<MinhaArea />} />
