@@ -22,6 +22,7 @@ import { parseValeTransportePdf, type VtPdfParseResult } from "@/lib/parseValeTr
 import { analisarVtInconsistencias, parseHorarioTrabalho } from "@/lib/analisarVtInconsistencias";
 import { AdminVtCalendario } from "./AdminVtCalendario";
 import { AdminVtInconsistencias } from "./AdminVtInconsistencias";
+import { AdminVtRelatorio } from "./AdminVtRelatorio";
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
