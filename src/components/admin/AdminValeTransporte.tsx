@@ -738,6 +738,10 @@ export function AdminValeTransporte() {
         <TabsContent value="calendario" className="space-y-6 mt-4">
           <AdminVtCalendario />
         </TabsContent>
+
+        <TabsContent value="relatorio" className="space-y-6 mt-4">
+          <AdminVtRelatorio />
+        </TabsContent>
       </Tabs>
 
       {/* Dialog de preview do PDF */}
