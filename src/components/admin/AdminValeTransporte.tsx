@@ -22,6 +22,7 @@ import { parseValeTransportePdf, type VtPdfParseResult } from "@/lib/parseValeTr
 import { analisarVtInconsistencias, parseHorarioTrabalho } from "@/lib/analisarVtInconsistencias";
 import { AdminVtCalendario } from "./AdminVtCalendario";
 import { AdminVtInconsistencias } from "./AdminVtInconsistencias";
+import { AdminVtRelatorio } from "./AdminVtRelatorio";
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
@@ -441,6 +442,7 @@ export function AdminValeTransporte() {
           <TabsTrigger value="cartoes">Cartões</TabsTrigger>
           <TabsTrigger value="inconsistencias">Inconsistências</TabsTrigger>
           <TabsTrigger value="calendario">Calendário</TabsTrigger>
+          <TabsTrigger value="relatorio">Relatório</TabsTrigger>
         </TabsList>
 
         <TabsContent value="mensal" className="space-y-6 mt-4">
@@ -735,6 +737,10 @@ export function AdminValeTransporte() {
 
         <TabsContent value="calendario" className="space-y-6 mt-4">
           <AdminVtCalendario />
+        </TabsContent>
+
+        <TabsContent value="relatorio" className="space-y-6 mt-4">
+          <AdminVtRelatorio />
         </TabsContent>
       </Tabs>
 
