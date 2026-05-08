@@ -286,6 +286,33 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_google_links: {
+        Row: {
+          ativo: boolean
+          conversa_id: string
+          created_at: string
+          criado_por: string | null
+          google_space_name: string
+          id: string
+        }
+        Insert: {
+          ativo?: boolean
+          conversa_id: string
+          created_at?: string
+          criado_por?: string | null
+          google_space_name: string
+          id?: string
+        }
+        Update: {
+          ativo?: boolean
+          conversa_id?: string
+          created_at?: string
+          criado_por?: string | null
+          google_space_name?: string
+          id?: string
+        }
+        Relationships: []
+      }
       chat_membros: {
         Row: {
           conversa_id: string
