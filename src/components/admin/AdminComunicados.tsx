@@ -46,6 +46,7 @@ export const AdminComunicados = () => {
   const [tipoDestinatario, setTipoDestinatario] = useState("todos");
   const [valorDestinatario, setValorDestinatario] = useState("");
   const [selectedCpfs, setSelectedCpfs] = useState<string[]>([]);
+  const [buscaFunc, setBuscaFunc] = useState("");
   const [funcionarios, setFuncionarios] = useState<{ cpf: string; nome_completo: string; unidade: string | null; departamento: string | null }[]>([]);
   const [unidades, setUnidades] = useState<string[]>([]);
   const [departamentos, setDepartamentos] = useState<string[]>([]);
