@@ -57,9 +57,15 @@ export const ChatNovaConversa = ({ open, onOpenChange, meuCpf, onConversaCriada 
     setSelecionados(prev => prev.includes(cpf) ? prev.filter(c => c !== cpf) : [...prev, cpf]);
   };
 
-  const filtrados = funcionarios.filter(f =>
-    f.nome.toLowerCase().includes(busca.toLowerCase()) || f.cpf.includes(busca.replace(/\D/g, ""))
-  );
+  const normalizar = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const buscaNorm = normalizar(busca.trim());
+  const buscaDigitos = busca.replace(/\D/g, "");
+  const filtrados = funcionarios.filter(f => {
+    if (!buscaNorm && !buscaDigitos) return true;
+    const matchNome = buscaNorm.length > 0 && normalizar(f.nome).includes(buscaNorm);
+    const matchCpf = buscaDigitos.length > 0 && f.cpf.includes(buscaDigitos);
+    return matchNome || matchCpf;
+  });
 
   const criarConversa = async (tipo: "individual" | "grupo") => {
     if (selecionados.length === 0) return;
