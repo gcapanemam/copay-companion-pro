@@ -46,6 +46,7 @@ export const AdminComunicados = () => {
   const [tipoDestinatario, setTipoDestinatario] = useState("todos");
   const [valorDestinatario, setValorDestinatario] = useState("");
   const [selectedCpfs, setSelectedCpfs] = useState<string[]>([]);
+  const [buscaFunc, setBuscaFunc] = useState("");
   const [funcionarios, setFuncionarios] = useState<{ cpf: string; nome_completo: string; unidade: string | null; departamento: string | null }[]>([]);
   const [unidades, setUnidades] = useState<string[]>([]);
   const [departamentos, setDepartamentos] = useState<string[]>([]);
@@ -294,20 +295,27 @@ export const AdminComunicados = () => {
                 </div>
               )}
 
-              {tipoDestinatario === "selecionados" && (
-                <div className="space-y-2">
-                  <Label>Funcionários ({selectedCpfs.length} selecionados)</Label>
-                  <div className="border rounded-md max-h-48 overflow-y-auto p-2 space-y-1">
-                    {funcionarios.map(f => (
-                      <label key={f.cpf} className="flex items-center gap-2 py-1 px-2 hover:bg-muted rounded cursor-pointer text-sm">
-                        <Checkbox checked={selectedCpfs.includes(f.cpf)} onCheckedChange={() => toggleCpf(f.cpf)} />
-                        <span>{f.nome_completo}</span>
-                        <span className="text-muted-foreground text-xs ml-auto">{f.unidade || ""}</span>
-                      </label>
-                    ))}
+              {tipoDestinatario === "selecionados" && (() => {
+                const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                const q = norm(buscaFunc.trim());
+                const filtrados = q ? funcionarios.filter(f => norm(f.nome_completo).includes(q) || (f.unidade && norm(f.unidade).includes(q)) || (f.departamento && norm(f.departamento).includes(q))) : funcionarios;
+                return (
+                  <div className="space-y-2">
+                    <Label>Funcionários ({selectedCpfs.length} selecionados)</Label>
+                    <Input placeholder="Buscar funcionário..." value={buscaFunc} onChange={e => setBuscaFunc(e.target.value)} />
+                    <div className="border rounded-md max-h-48 overflow-y-auto p-2 space-y-1">
+                      {filtrados.map(f => (
+                        <label key={f.cpf} className="flex items-center gap-2 py-1 px-2 hover:bg-muted rounded cursor-pointer text-sm">
+                          <Checkbox checked={selectedCpfs.includes(f.cpf)} onCheckedChange={() => toggleCpf(f.cpf)} />
+                          <span>{f.nome_completo}</span>
+                          <span className="text-muted-foreground text-xs ml-auto">{f.unidade || ""}</span>
+                        </label>
+                      ))}
+                      {filtrados.length === 0 && <p className="text-xs text-muted-foreground text-center py-2">Nenhum funcionário encontrado.</p>}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               <Button onClick={handleCreate} disabled={saving} className="w-full">
                 <Send className="h-4 w-4 mr-1" />{saving ? "Enviando..." : "Enviar Comunicado"}
