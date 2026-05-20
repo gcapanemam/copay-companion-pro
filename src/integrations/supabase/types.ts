@@ -262,150 +262,6 @@ export type Database = {
         }
         Relationships: []
       }
-      chat_conversas: {
-        Row: {
-          created_at: string
-          criado_por: string | null
-          id: string
-          nome: string | null
-          tipo: string
-        }
-        Insert: {
-          created_at?: string
-          criado_por?: string | null
-          id?: string
-          nome?: string | null
-          tipo?: string
-        }
-        Update: {
-          created_at?: string
-          criado_por?: string | null
-          id?: string
-          nome?: string | null
-          tipo?: string
-        }
-        Relationships: []
-      }
-      chat_google_links: {
-        Row: {
-          ativo: boolean
-          conversa_id: string
-          created_at: string
-          criado_por: string | null
-          google_space_name: string
-          id: string
-        }
-        Insert: {
-          ativo?: boolean
-          conversa_id: string
-          created_at?: string
-          criado_por?: string | null
-          google_space_name: string
-          id?: string
-        }
-        Update: {
-          ativo?: boolean
-          conversa_id?: string
-          created_at?: string
-          criado_por?: string | null
-          google_space_name?: string
-          id?: string
-        }
-        Relationships: []
-      }
-      chat_membros: {
-        Row: {
-          conversa_id: string
-          cpf: string
-          created_at: string
-          id: string
-        }
-        Insert: {
-          conversa_id: string
-          cpf: string
-          created_at?: string
-          id?: string
-        }
-        Update: {
-          conversa_id?: string
-          cpf?: string
-          created_at?: string
-          id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "chat_membros_conversa_id_fkey"
-            columns: ["conversa_id"]
-            isOneToOne: false
-            referencedRelation: "chat_conversas"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      chat_mensagem_status: {
-        Row: {
-          cpf: string
-          id: string
-          lido_em: string | null
-          mensagem_id: string
-          recebido_em: string | null
-        }
-        Insert: {
-          cpf: string
-          id?: string
-          lido_em?: string | null
-          mensagem_id: string
-          recebido_em?: string | null
-        }
-        Update: {
-          cpf?: string
-          id?: string
-          lido_em?: string | null
-          mensagem_id?: string
-          recebido_em?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "chat_mensagem_status_mensagem_id_fkey"
-            columns: ["mensagem_id"]
-            isOneToOne: false
-            referencedRelation: "chat_mensagens"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      chat_mensagens: {
-        Row: {
-          conteudo: string
-          conversa_id: string
-          created_at: string
-          id: string
-          remetente_cpf: string
-        }
-        Insert: {
-          conteudo: string
-          conversa_id: string
-          created_at?: string
-          id?: string
-          remetente_cpf: string
-        }
-        Update: {
-          conteudo?: string
-          conversa_id?: string
-          created_at?: string
-          id?: string
-          remetente_cpf?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "chat_mensagens_conversa_id_fkey"
-            columns: ["conversa_id"]
-            isOneToOne: false
-            referencedRelation: "chat_conversas"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       codigos_2fa: {
         Row: {
           codigo: string
@@ -1034,6 +890,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      google_chat_tokens: {
+        Row: {
+          conectado_em: string
+          cpf: string
+          google_email: string
+          refresh_token_cripto: string
+          scopes: string | null
+          updated_at: string
+        }
+        Insert: {
+          conectado_em?: string
+          cpf: string
+          google_email: string
+          refresh_token_cripto: string
+          scopes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          conectado_em?: string
+          cpf?: string
+          google_email?: string
+          refresh_token_cripto?: string
+          scopes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       jornadas_trabalho: {
         Row: {
@@ -1700,6 +1583,11 @@ export type Database = {
     }
     Functions: {
       _equipamento_enc_key: { Args: never; Returns: string }
+      _google_chat_enc_key: { Args: never; Returns: string }
+      obter_google_chat_refresh_token: {
+        Args: { p_cpf: string }
+        Returns: string
+      }
       obter_senha_equipamento: { Args: { p_id: string }; Returns: string }
       salvar_equipamento_ponto: {
         Args: {
@@ -1716,6 +1604,15 @@ export type Database = {
           p_usuario: string
         }
         Returns: string
+      }
+      salvar_google_chat_token: {
+        Args: {
+          p_cpf: string
+          p_email: string
+          p_refresh_token: string
+          p_scopes: string
+        }
+        Returns: undefined
       }
     }
     Enums: {
